@@ -36,6 +36,7 @@
   .tag-neutral{background:var(--neutral);color:#1e0730;}
   .tag-you{background:var(--gold);color:#241a0a;}
   .green{color:#43c59e;}
+  @keyframes toastIn{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
   .muted{color:var(--muted);font-size:.8rem;}
   .log{max-height:160px;overflow-y:auto;font-size:.8rem;color:#c9c3e0;background:#161320;border-radius:10px;padding:8px 10px;}
   .log div{margin-bottom:3px;}
@@ -68,15 +69,7 @@
 
 <div id="app" style="display:none;"></div>
 
-<div id="toast" style="display:none;position:fixed;left:0;right:0;top:12px;z-index:100;padding:0 12px;">
-  <div style="max-width:520px;margin:0 auto;background:#241f38;border:1px solid var(--gold);border-radius:14px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.6);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-      <b style="color:var(--gold);font-size:.85rem;">📣 Diễn biến lượt vừa rồi</b>
-      <span class="muted" style="font-size:.7rem;">chạm để đóng</span>
-    </div>
-    <div id="toastBody" style="font-size:.85rem;color:#e8e4f5;line-height:1.5;max-height:40vh;overflow-y:auto;"></div>
-  </div>
-</div>
+<div id="toastStack" style="position:fixed;left:0;right:0;top:10px;z-index:100;padding:0 12px;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;"></div>
 
 <script>
 const LOCATIONS = [
@@ -265,7 +258,7 @@ function startGame(){
     s.players[id] = p;
   });
   s.order = order; s.turnIdx = 0; s.round = 1; s.phase = 'playing'; s.log = []; s.deathOrder = [];
-  s.hasRolled = false; s.hasAttacked = false; s.lastRoll = null; s.pendingVision = false;
+  s.hasRolled = false; s.hasAttacked = false; s.lastRoll = null; s.pendingVision = false; s.visionReveal = null;
   pushLog(s, `Ván mới bắt đầu với ${order.length} người chơi! Vòng 1 — lượt của ${s.players[order[0]].name}.`);
   publishState(s); acting = false; render();
 }
@@ -359,7 +352,10 @@ function giveVision(targetId){
   const d = card.dmg[t.faction] || 0;
   const result = d>0 ? `${t.name} mất ${d} máu` : `${t.name} không hề hấn gì`;
   if(d>0){ t.hp = clamp(t.hp-d,0,t.maxHp); checkDeath(s,targetId,myId); }
-  pushLog(s, `🟢 ${me.name} đưa thẻ "${card.name}" (${card.desc}) cho ${t.name} → ${result}.`);
+  // Công khai: chỉ ai đưa cho ai + kết quả (KHÔNG lộ tên/nội dung thẻ)
+  pushLog(s, `🟢 ${me.name} đưa 1 thẻ Ảo Ảnh cho ${t.name} → ${result}.`);
+  // Riêng tư: nội dung thẻ chỉ hiện cho người đưa + người nhận
+  s.visionReveal = { by: myId, target: targetId, card: card.name, desc: card.desc, result, ts: Date.now() };
   s.pendingVision = false;
   checkWin(s);
   autoAdvanceIfStuck(s);
@@ -492,26 +488,44 @@ function resetRoom(){
 
 // ---------- POPUP DIỄN BIẾN ----------
 let lastLogSeen = -1;
-let toastTimer = null;
-function showToast(lines){
-  const t = document.getElementById('toast'), b = document.getElementById('toastBody');
-  if(!t || !b) return;
-  b.innerHTML = lines.map(l=>`<div style="margin-bottom:3px;">${l}</div>`).join('');
-  t.style.display = 'block';
-  if(toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>{ t.style.display='none'; }, 7000);
+let lastVisionTs = 0;
+function pushToast(lines){
+  const stack = document.getElementById('toastStack');
+  if(!stack) return;
+  const el = document.createElement('div');
+  el.style.cssText = 'pointer-events:auto;max-width:520px;width:100%;background:#241f38;border:1px solid var(--gold);border-radius:14px;padding:10px 14px;box-shadow:0 10px 30px rgba(0,0,0,.6);animation:toastIn .2s ease;cursor:pointer;';
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <b style="color:var(--gold);font-size:.8rem;">📣 Diễn biến</b>
+      <span class="muted" style="font-size:.68rem;">chạm để đóng</span></div>
+    <div style="font-size:.85rem;color:#e8e4f5;line-height:1.45;">${lines.map(l=>`<div>${l}</div>`).join('')}</div>`;
+  const remove = ()=>{ if(el.parentNode){ el.style.transition='opacity .25s'; el.style.opacity='0'; setTimeout(()=>el.remove(),250); } };
+  el.onclick = remove;
+  stack.appendChild(el);
+  while(stack.children.length > 5){ stack.firstChild.remove(); } // tối đa 5 popup cùng lúc
+  setTimeout(remove, 10000); // hiển thị ~10 giây
 }
-function hideToast(){ const t=document.getElementById('toast'); if(t) t.style.display='none'; if(toastTimer) clearTimeout(toastTimer); }
-// Hiện popup khi một lượt vừa kết thúc (batch log có mốc "lượt của" hoặc kết thúc game).
-function maybeToast(s){
+// Nổ popup NGAY khi có bất kỳ tác động nào (cho cả người trong lượt lẫn người khác);
+// + popup RIÊNG nội dung thẻ Ảo Ảnh chỉ cho người đưa và người nhận.
+function processEvents(s){
   if(!s || !s.log) return;
-  if(lastLogSeen === -1 || s.log.length < lastLogSeen){ lastLogSeen = s.log.length; return; }
-  if(s.log.length <= lastLogSeen) return;
-  const pending = s.log.slice(lastLogSeen);
-  const boundary = pending.some(l => l.includes('lượt của') || l.includes('🏁') || l.includes('🟢'));
-  if(!boundary) return; // lượt chưa xong, chờ thêm diễn biến
-  showToast(pending);
-  lastLogSeen = s.log.length;
+  if(lastLogSeen === -1 || s.log.length < lastLogSeen){
+    lastLogSeen = s.log.length;
+    lastVisionTs = s.visionReveal ? s.visionReveal.ts : 0;
+    return;
+  }
+  const v = s.visionReveal;
+  if(v && v.ts > lastVisionTs){
+    lastVisionTs = v.ts;
+    if(myId===v.by || myId===v.target){
+      const who = myId===v.by ? 'Bạn ĐƯA thẻ này' : 'Bạn NHẬN thẻ này';
+      setTimeout(()=> alert(`🟢 Thẻ Ảo Ảnh (chỉ bạn và người kia biết nội dung)\n\n"${v.card}"\n${v.desc}\n\n${who}. Kết quả: ${v.result}.`), 150);
+    }
+  }
+  if(s.log.length > lastLogSeen){
+    const pending = s.log.slice(lastLogSeen);
+    pushToast(pending);        // nổ ngay, không chờ hết lượt
+    lastLogSeen = s.log.length;
+  }
 }
 
 // ---------- RENDER ----------
@@ -525,7 +539,7 @@ function render(){
 
   if(!state){ app.innerHTML='<div class="card center muted">Đang đồng bộ...</div>'; return; }
   const s = state;
-  if(s.phase==='playing' || s.phase==='ended') maybeToast(s);
+  if(s.phase==='playing' || s.phase==='ended') processEvents(s);
 
   if(s.phase==='lobby'){
     const inLobby = !!s.players[myId];
@@ -633,7 +647,7 @@ function render(){
       controls = `<button class="btn-gold" id="rollBtn" style="width:100%;font-size:1.05rem;">🎲 Tung Xúc Xắc Để Di Chuyển</button>`;
     } else if(s.pendingVision){
       const targets = s.order.filter(id=>id!==myId && s.players[id].alive);
-      controls = `<div class="card"><div class="muted" style="margin-bottom:6px;">🟢 Thẻ Xanh — chọn 1 người để đưa thẻ Ảo Ảnh (thẻ rút ngẫu nhiên, kết quả sẽ hiện popup cho mọi người):</div>
+      controls = `<div class="card"><div class="muted" style="margin-bottom:6px;">🟢 Thẻ Xanh — chọn 1 người để đưa thẻ Ảo Ảnh (nội dung thẻ chỉ bạn và người đó thấy; mọi người thấy kết quả):</div>
         <div class="row">${targets.map(id=>`<button class="btn-target" style="border-color:#43c59e;color:#9ff0d6;" onclick="giveVision('${id}')">🟢 ${s.players[id].name}</button>`).join('')}</div></div>`;
     } else {
       const othersHere = playersAt(s, me.location, myId);
@@ -675,7 +689,6 @@ function render(){
   const rb  = document.getElementById('resetBtn');
   btn.onclick = joinLobby;
   rb.onclick = resetRoom;
-  const toastEl = document.getElementById('toast'); if(toastEl) toastEl.onclick = hideToast;
   inp.addEventListener('keydown', e=>{ if(e.key==='Enter') joinLobby(); });
   render();
   connectMQTT();
