@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Săn Bóng Tối</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js" onerror="window.__mqttFail=true"></script>
+<style>
+  :root{
+    --bg:#0f0e17; --panel:#1a1825; --panel2:#211f30; --accent:#e63946;
+    --gold:#f4a261; --text:#f2f2f2; --muted:#9a95ab; --hunter:#4ea8de; --shadow:#e63946; --neutral:#9b5de5;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:radial-gradient(circle at 50% 0%,#241f38,#0f0e17 60%);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;padding:16px;}
+  h1{font-size:1.4rem;text-align:center;margin:4px 0 2px;letter-spacing:1px;color:var(--gold);}
+  .sub{text-align:center;color:var(--muted);font-size:.8rem;margin-bottom:14px;}
+  .card{background:var(--panel);border:1px solid #322d47;border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 4px 14px rgba(0,0,0,.3);}
+  input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid #3d3757;background:var(--panel2);color:var(--text);font-size:1rem;}
+  button{border:none;border-radius:10px;padding:12px 14px;font-size:.95rem;font-weight:600;cursor:pointer;margin:4px 4px 4px 0;transition:transform .1s;}
+  button:active{transform:scale(.96);}
+  .btn-main{background:linear-gradient(135deg,var(--accent),#b5202b);color:#fff;width:100%;}
+  .btn-main:disabled{background:#3a3550;color:#77718f;cursor:not-allowed;}
+  .btn-loc{background:var(--panel2);color:var(--text);border:1px solid #443e63;flex:1 1 45%;text-align:left;}
+  .btn-loc.here{border-color:var(--gold);background:#2c2440;}
+  .btn-loc small{display:block;color:var(--muted);font-weight:400;}
+  .btn-target{background:#3a1622;color:#ffb4b4;border:1px solid var(--accent);}
+  .btn-gold{background:var(--gold);color:#241a0a;}
+  .btn-ghost{background:transparent;color:var(--muted);border:1px solid #443e63;}
+  .row{display:flex;flex-wrap:wrap;gap:6px;}
+  .player-pill{display:flex;justify-content:space-between;align-items:center;background:var(--panel2);border-radius:10px;padding:8px 10px;margin-bottom:6px;font-size:.9rem;}
+  .bar{height:8px;border-radius:6px;background:#332d4a;overflow:hidden;width:80px;}
+  .bar-fill{height:100%;background:linear-gradient(90deg,#2ecc71,#e63946);}
+  .tag{font-size:.65rem;padding:2px 7px;border-radius:20px;font-weight:700;text-transform:uppercase;}
+  .tag-hunter{background:var(--hunter);color:#04263e;}
+  .tag-shadow{background:var(--shadow);color:#3d0006;}
+  .tag-neutral{background:var(--neutral);color:#1e0730;}
+  .tag-you{background:var(--gold);color:#241a0a;}
+  .muted{color:var(--muted);font-size:.8rem;}
+  .log{max-height:160px;overflow-y:auto;font-size:.8rem;color:#c9c3e0;background:#161320;border-radius:10px;padding:8px 10px;}
+  .log div{margin-bottom:3px;}
+  .center{text-align:center;}
+  .role-badge{font-size:1.1rem;font-weight:800;text-align:center;padding:10px;border-radius:12px;margin-bottom:8px;}
+  .hp-num{font-weight:700;}
+  #status{font-size:.72rem;text-align:center;color:var(--muted);margin-bottom:8px;}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;}
+  .dot-on{background:#2ecc71;} .dot-off{background:#e63946;} .dot-wait{background:#f4a261;}
+</style>
+</head>
+<body>
+<h1>🌘 SĂN BÓNG TỐI</h1>
+<div class="sub">Trò chơi ẩn danh tính · chơi trên điện thoại · không cần đăng nhập</div>
+
+<div id="syncBanner" style="display:none;background:#4a1620;border:1px solid var(--accent);color:#ffb4b4;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:.82rem;text-align:center;">
+  ⚠️ Chưa kết nối được máy chủ đồng bộ. Có thể mạng của link này bị chặn. Nếu bạn đang mở bằng link Claude mà mãi không kết nối, hãy <b>tải file HTML về và host/mở ở nơi khác</b> (VD: Netlify Drop, GitHub Pages) rồi chia sẻ link đó.
+</div>
+
+<div id="status"><span class="dot dot-wait"></span>Đang kết nối máy chủ...</div>
+
+<div id="nameScreen">
+  <div class="card">
+    <p class="muted">Nhập tên của bạn để tham gia (mỗi lúc chỉ có 1 ván đang diễn ra — nếu ván đang chơi, bạn sẽ vào hàng chờ).</p>
+    <input id="nameInput" type="text" maxlength="16" placeholder="Tên của bạn..." autocomplete="off" autocorrect="off" autocapitalize="off">
+    <button class="btn-main" id="joinBtn" style="margin-top:10px;">Tham Gia</button>
+    <button class="btn-ghost" id="resetBtn" style="width:100%;margin-top:8px;">Đặt lại phòng (nếu bị kẹt ván cũ)</button>
+  </div>
+</div>
+
+<div id="app" style="display:none;"></div>
+
+<script>
+const LOCATIONS = [
+  {id:'chapel', name:'Nhà Nguyện', type:'white'},
+  {id:'grave',  name:'Nghĩa Trang', type:'black'},
+  {id:'cabin',  name:'Cabin Cũ',    type:'white'},
+  {id:'woods',  name:'Rừng Rậm',    type:'black'},
+  {id:'tower',  name:'Tháp Canh',   type:'white'},
+  {id:'cave',   name:'Hang Động',   type:'black'},
+];
+const FACTION_TABLE = {2:[1,1,0],3:[1,1,1],4:[2,1,1],5:[2,2,1],6:[3,2,1],7:[3,2,2],8:[4,2,2]};
+const MAX_PLAYERS = 8, MIN_PLAYERS = 2, MAX_ROUNDS = 15;
+
+const BROKER = 'wss://broker.emqx.io:8084/mqtt';
+const TOPIC  = 'sanbongtoi/room/9x7k2v/state'; // 1 phòng cố định
+
+let myId = 'p_' + Math.random().toString(36).slice(2,10);
+let myName = '';
+let state = null;
+let client = null;
+let connected = false;
+let acting = false;
+let selfHealTs = 0;
+
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function shuffle(a){ a=[...a]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
+function clamp(n,lo,hi){ return Math.max(lo,Math.min(hi,n)); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function cur(){ return state ? clone(state) : null; }
+
+function setStatus(){
+  const el = document.getElementById('status');
+  if(!el) return;
+  if(connected){ el.innerHTML = '<span class="dot dot-on"></span>Đã kết nối máy chủ đồng bộ'; }
+  else { el.innerHTML = '<span class="dot dot-off"></span>Mất kết nối — đang thử lại...'; }
+}
+function setSyncError(v){
+  const el = document.getElementById('syncBanner');
+  if(el) el.style.display = v ? 'block' : 'none';
+  setStatus();
+}
+
+function freshLobby(){
+  return { phase:'lobby', players:{}, order:[], waiting:[], turnIdx:0, round:1, log:['Sảnh chờ đã mở. Cần tối thiểu 2 người để bắt đầu.'] };
+}
+function pushLog(s, msg){ s.log.push(msg); if(s.log.length>40) s.log = s.log.slice(-40); }
+
+// ---------- MQTT ----------
+function connectMQTT(){
+  if(typeof mqtt === 'undefined' || window.__mqttFail){
+    setSyncError(true);
+    const el = document.getElementById('status');
+    if(el) el.innerHTML = '<span class="dot dot-off"></span>Không tải được thư viện mạng — hãy host file ở nơi khác.';
+    return;
+  }
+  client = mqtt.connect(BROKER, {
+    clientId: 'sbt_' + Math.random().toString(16).slice(2,10),
+    clean: true, connectTimeout: 8000, reconnectPeriod: 3000, keepalive: 30
+  });
+  client.on('connect', ()=>{
+    connected = true; setSyncError(false);
+    client.subscribe(TOPIC, {qos:0});
+  });
+  client.on('message', (t, payload)=>{
+    let s;
+    try{ s = JSON.parse(payload.toString()); }catch(e){ return; }
+    if(!s || typeof s !== 'object') return;
+    state = s;
+    if(myName){ selfHeal(); render(); }
+  });
+  client.on('reconnect', ()=>{ connected = false; setStatus(); });
+  client.on('offline', ()=>{ connected = false; setSyncError(true); });
+  client.on('error', (e)=>{ console.error('mqtt error', e); connected = false; setSyncError(true); });
+  client.on('close', ()=>{ connected = false; setStatus(); });
+}
+
+function publishState(s){
+  state = s;
+  if(client && connected){
+    client.publish(TOPIC, JSON.stringify(s), {qos:0, retain:true});
+    setSyncError(false);
+  } else {
+    setSyncError(true);
+  }
+}
+
+function waitConnected(ms){
+  return new Promise(res=>{
+    if(connected) return res(true);
+    const t0 = Date.now();
+    const iv = setInterval(()=>{
+      if(connected || Date.now()-t0 > ms){ clearInterval(iv); res(connected); }
+    }, 150);
+  });
+}
+
+// Tự thêm lại mình vào sảnh nếu bị mất do 2 người vào cùng lúc (chống race).
+function selfHeal(){
+  if(!myName || !state || state.phase !== 'lobby') return;
+  const inPlayers = !!state.players[myId];
+  const inWaiting = (state.waiting||[]).some(w=>w.id===myId);
+  if(inPlayers || inWaiting) return;
+  if(Date.now() - selfHealTs < 1200) return; // tránh lặp vô hạn
+  selfHealTs = Date.now();
+  const s = cur();
+  if(Object.keys(s.players).length >= MAX_PLAYERS) s.waiting.push({id:myId, name:myName});
+  else s.players[myId] = { name:myName };
+  publishState(s);
+}
+
+// ---------- ACTIONS ----------
+async function joinLobby(){
+  const inp = document.getElementById('nameInput');
+  myName = (inp ? inp.value : '').trim();
+  if(!myName){ return; }
+  const btn = document.getElementById('joinBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Đang vào...'; }
+  const ok = await waitConnected(7000);
+  if(!ok){
+    setSyncError(true);
+    if(btn){ btn.disabled = false; btn.textContent = 'Thử lại'; }
+    myName = '';
+    return;
+  }
+  let s = cur() || freshLobby();
+  if(s.phase === 'lobby'){
+    if(Object.keys(s.players).length >= MAX_PLAYERS) s.waiting.push({id:myId, name:myName});
+    else if(!s.players[myId]) s.players[myId] = { name:myName };
+  } else {
+    if(!s.waiting.find(w=>w.id===myId)) s.waiting.push({id:myId, name:myName});
+  }
+  publishState(s);
+  render();
+}
+
+function startGame(){
+  if(acting) return; acting = true;
+  let s = cur();
+  const ids = Object.keys(s.players);
+  if(ids.length < MIN_PLAYERS){ acting=false; return; }
+  const n = clamp(ids.length,2,8);
+  const [nh,ns,nn] = FACTION_TABLE[n];
+  let factions = [];
+  for(let i=0;i<nh;i++) factions.push('hunter');
+  for(let i=0;i<ns;i++) factions.push('shadow');
+  for(let i=0;i<nn;i++) factions.push('neutral');
+  factions = shuffle(factions);
+  const order = shuffle(ids);
+  order.forEach((id,i)=>{
+    const maxHp = 8 + Math.floor(Math.random()*5);
+    s.players[id] = { name:s.players[id].name, faction:factions[i], maxHp, hp:maxHp, alive:true, location:null };
+  });
+  s.order = order; s.turnIdx = 0; s.round = 1; s.phase = 'playing'; s.log = [];
+  pushLog(s, `Ván mới bắt đầu với ${order.length} người chơi! Vòng 1 — lượt của ${s.players[order[0]].name}.`);
+  publishState(s); acting = false; render();
+}
+
+function currentTurnId(s){ return s.order[s.turnIdx]; }
+function playersAt(s, locId, excludeId){
+  return s.order.filter(id => s.players[id].alive && s.players[id].location===locId && id!==excludeId);
+}
+
+function moveTo(locId){
+  if(acting) return; acting = true;
+  let s = cur();
+  const me = s.players[myId];
+  const loc = LOCATIONS.find(l=>l.id===locId);
+  me.location = locId;
+  const others = playersAt(s, locId, myId);
+  let msg = `${me.name} di chuyển tới ${loc.name}.`;
+  let peekTarget = null;
+  if(loc.type==='white'){
+    const roll = Math.random();
+    if(roll < 0.4){ me.hp = clamp(me.hp+3,0,me.maxHp); msg += ` Rút thẻ Trắng: hồi 3 máu.`; }
+    else if(roll < 0.7){ me.hp = clamp(me.hp+1,0,me.maxHp); msg += ` Rút thẻ Trắng: hồi 1 máu.`; }
+    else {
+      if(others.length>0){ const t=pick(others); s.players[t].hp=clamp(s.players[t].hp-2,0,s.players[t].maxHp); msg+=` Rút thẻ Trắng: gây 2 sát thương lên ${s.players[t].name}.`; checkDeath(s,t); }
+      else { me.hp=clamp(me.hp+2,0,me.maxHp); msg+=` Rút thẻ Trắng: hồi 2 máu (không có ai để tấn công).`; }
+    }
+  } else {
+    const roll = Math.random();
+    if(roll < 0.4){ me.hp=clamp(me.hp-3,0,me.maxHp); msg+=` Rút thẻ Đen: mất 3 máu.`; checkDeath(s,myId); }
+    else if(roll < 0.7){ me.hp=clamp(me.hp-1,0,me.maxHp); msg+=` Rút thẻ Đen: mất 1 máu.`; checkDeath(s,myId); }
+    else {
+      if(others.length>0){ const t=pick(others); peekTarget=s.players[t]; msg+=` Rút thẻ Đen: bạn nhìn trộm được phe của một người ở đây.`; }
+      else { me.hp=clamp(me.hp-1,0,me.maxHp); msg+=` Rút thẻ Đen: mất 1 máu (không có ai ở đây).`; checkDeath(s,myId); }
+    }
+  }
+  pushLog(s, msg);
+  checkWin(s);
+  publishState(s); acting = false; render();
+  if(peekTarget){ setTimeout(()=> alert(`👁️ Thông tin bí mật: ${peekTarget.name} thuộc phe ${factionLabel(peekTarget.faction)}.`), 250); }
+}
+
+function attack(targetId){
+  if(acting) return; acting = true;
+  let s = cur();
+  const me = s.players[myId], t = s.players[targetId];
+  const dmg = 2 + Math.floor(Math.random()*3);
+  t.hp = clamp(t.hp-dmg,0,t.maxHp);
+  pushLog(s, `⚔️ ${me.name} tấn công ${t.name}, gây ${dmg} sát thương.`);
+  checkDeath(s, targetId); checkWin(s);
+  publishState(s); acting = false; render();
+}
+
+function checkDeath(s, id){
+  const p = s.players[id];
+  if(p.hp<=0 && p.alive){ p.alive=false; pushLog(s, `💀 ${p.name} đã gục ngã! (Phe: ${factionLabel(p.faction)})`); }
+}
+function factionLabel(f){ return f==='hunter'?'Thợ Săn':f==='shadow'?'Bóng Tối':'Trung Lập'; }
+
+function checkWin(s){
+  if(s.phase!=='playing') return;
+  const alive = s.order.filter(id=>s.players[id].alive);
+  const h = alive.filter(id=>s.players[id].faction==='hunter');
+  const sh = alive.filter(id=>s.players[id].faction==='shadow');
+  let winner = null;
+  if(sh.length===0 && h.length>0) winner='hunter';
+  else if(h.length===0 && sh.length>0) winner='shadow';
+  else if(h.length===0 && sh.length===0 && alive.length>0) winner='neutral';
+  if(!winner && s.round >= MAX_ROUNDS){
+    const hHp = h.reduce((a,id)=>a+s.players[id].hp,0);
+    const sHp = sh.reduce((a,id)=>a+s.players[id].hp,0);
+    winner = hHp>=sHp ? 'hunter' : 'shadow';
+  }
+  if(winner){ s.phase='ended'; s.winner=winner; pushLog(s, `🏁 Trò chơi kết thúc! Phe ${factionLabel(winner)} chiến thắng!`); }
+}
+
+function endTurn(){
+  if(acting) return; acting = true;
+  let s = cur();
+  if(s.phase!=='playing'){ acting=false; return; }
+  let next = s.turnIdx, guard = 0;
+  do{ next=(next+1)%s.order.length; guard++; if(next===0) s.round++; }
+  while(!s.players[s.order[next]].alive && guard <= s.order.length*2);
+  s.turnIdx = next;
+  pushLog(s, `➡️ Vòng ${s.round} — lượt của ${s.players[s.order[next]].name}.`);
+  checkWin(s);
+  publishState(s); acting = false; render();
+}
+
+function newRound(){
+  if(acting) return; acting = true;
+  let s = cur();
+  const lobby = freshLobby();
+  s.order.forEach(id=>{ lobby.players[id] = { name:s.players[id].name }; });
+  (s.waiting||[]).forEach(w=>{ if(!lobby.players[w.id]) lobby.players[w.id]={name:w.name}; });
+  pushLog(lobby, 'Ván trước đã kết thúc. Sảnh chờ mở lại — bấm Bắt Đầu khi đủ người.');
+  publishState(lobby); acting = false; render();
+}
+
+function leaveLobby(){
+  let s = cur();
+  if(s){
+    if(s.phase==='lobby' && s.players[myId]) delete s.players[myId];
+    s.waiting = (s.waiting||[]).filter(w=>w.id!==myId);
+    publishState(s);
+  }
+  myName='';
+  const inp=document.getElementById('nameInput'); if(inp) inp.value='';
+  const btn=document.getElementById('joinBtn'); if(btn){ btn.disabled=false; btn.textContent='Tham Gia'; }
+  render();
+}
+
+function resetRoom(){
+  if(!connected){ setSyncError(true); return; }
+  if(!confirm('Đặt lại phòng về sảnh chờ trống? Ván hiện tại (nếu có) sẽ bị xoá.')) return;
+  publishState(freshLobby());
+}
+
+// ---------- RENDER ----------
+function render(){
+  const app = document.getElementById('app');
+  const nameScreen = document.getElementById('nameScreen');
+  if(!myName){
+    nameScreen.style.display='block'; app.style.display='none'; setStatus(); return;
+  }
+  nameScreen.style.display='none'; app.style.display='block';
+
+  if(!state){ app.innerHTML='<div class="card center muted">Đang đồng bộ...</div>'; return; }
+  const s = state;
+
+  if(s.phase==='lobby'){
+    const inLobby = !!s.players[myId];
+    const list = Object.entries(s.players).map(([id,p])=>`
+      <div class="player-pill"><span>${p.name}${id===myId?' <span class="tag tag-you">Bạn</span>':''}</span></div>`).join('');
+    const waitList = (s.waiting||[]).map(w=>`<div class="player-pill"><span>${w.name}</span><span class="muted">chờ</span></div>`).join('');
+    const nPlayers = Object.keys(s.players).length;
+    app.innerHTML = `
+      <div class="card">
+        <div class="center muted">Sảnh chờ · ${nPlayers}/${MAX_PLAYERS} người</div>
+        <div style="margin-top:10px;">${list || '<div class="muted center">Chưa có ai...</div>'}</div>
+        ${waitList ? `<div class="muted" style="margin-top:8px;">Đang chờ ván tiếp theo:</div>${waitList}` : ''}
+        ${inLobby ? `
+          <button class="btn-main" id="startBtn" ${nPlayers<MIN_PLAYERS?'disabled':''}>
+            ${nPlayers<MIN_PLAYERS ? `Cần tối thiểu ${MIN_PLAYERS} người` : 'Bắt Đầu Ván Mới'}
+          </button>
+          <button class="btn-ghost" id="leaveBtn" style="width:100%;">Rời sảnh</button>
+        ` : `<div class="center muted" style="margin-top:8px;">Bạn đang trong hàng chờ, sẽ tự vào khi có chỗ.</div>`}
+      </div>`;
+    const sb=document.getElementById('startBtn'); if(sb) sb.onclick=startGame;
+    const lb=document.getElementById('leaveBtn'); if(lb) lb.onclick=leaveLobby;
+    return;
+  }
+
+  if(s.phase==='ended'){
+    const results = s.order.map(id=>{
+      const p=s.players[id];
+      return `<div class="player-pill"><span>${p.name}${id===myId?' 👑':''}</span><span class="tag tag-${p.faction}">${factionLabel(p.faction)}</span></div>`;
+    }).join('');
+    app.innerHTML = `
+      <div class="card center">
+        <div class="role-badge" style="background:var(--${s.winner});color:#fff;">🏆 PHE ${factionLabel(s.winner).toUpperCase()} CHIẾN THẮNG!</div>
+        ${results}
+        <button class="btn-main" id="newRoundBtn" style="margin-top:10px;">Chơi Ván Mới</button>
+      </div>
+      <div class="card"><div class="log">${s.log.map(l=>`<div>${l}</div>`).join('')}</div></div>`;
+    document.getElementById('newRoundBtn').onclick=newRound;
+    return;
+  }
+
+  // playing
+  const me = s.players[myId];
+  if(!me){
+    app.innerHTML = `<div class="card center"><div class="muted">Một ván đang diễn ra. Bạn đang trong hàng chờ và sẽ tự vào sảnh khi ván này kết thúc.</div></div>
+      <div class="card"><div class="log">${s.log.slice().reverse().map(l=>`<div>${l}</div>`).join('')}</div></div>`;
+    return;
+  }
+  const myTurn = currentTurnId(s)===myId && me.alive;
+  const board = LOCATIONS.map(loc=>{
+    const here = playersAt(s, loc.id, null).map(id=>{
+      const p=s.players[id]; const pct=Math.round(p.hp/p.maxHp*100);
+      return `<div class="player-pill"><span>${p.name}${id===myId?' (bạn)':''}</span><span class="bar"><span class="bar-fill" style="width:${pct}%"></span></span></div>`;
+    }).join('');
+    return `<div class="card" style="padding:10px 12px;">
+      <button class="btn-loc ${me.location===loc.id?'here':''}" ${myTurn?'':'disabled'} onclick="moveTo('${loc.id}')" style="width:100%;">
+        ${loc.type==='white'?'☀️':'🌑'} ${loc.name} <small>${loc.type==='white'?'Thẻ Trắng':'Thẻ Đen'}</small>
+      </button>${here}</div>`;
+  }).join('');
+  const othersHere = playersAt(s, me.location, myId);
+  const attackBtns = (myTurn && me.location && othersHere.length>0) ? `
+    <div class="card"><div class="muted" style="margin-bottom:6px;">Tấn công người cùng khu vực:</div>
+      <div class="row">${othersHere.map(id=>`<button class="btn-target" onclick="attack('${id}')">⚔️ ${s.players[id].name}</button>`).join('')}</div>
+    </div>` : '';
+
+  app.innerHTML = `
+    <div class="card">
+      <div class="role-badge tag-${me.faction}" style="background:var(--${me.faction});color:#fff;">Vai trò của bạn: ${factionLabel(me.faction)}</div>
+      <div class="center">Máu: <span class="hp-num">${me.hp}</span> / ${me.maxHp}</div>
+      <div class="center muted" style="margin-top:4px;">Vòng ${s.round} · Lượt của: <b>${s.players[currentTurnId(s)].name}</b> ${myTurn?'(BẠN)':''}</div>
+    </div>
+    ${board}
+    ${attackBtns}
+    ${myTurn ? `<button class="btn-gold" id="endTurnBtn" style="width:100%;">Kết Thúc Lượt ➡️</button>` : ''}
+    <div class="card"><div class="muted" style="margin-bottom:6px;">Diễn biến:</div>
+      <div class="log">${s.log.slice().reverse().map(l=>`<div>${l}</div>`).join('')}</div></div>
+    <div class="card center muted" style="font-size:.75rem;">Người còn sống: ${s.order.filter(id=>s.players[id].alive).length}/${s.order.length}</div>`;
+  const et=document.getElementById('endTurnBtn'); if(et) et.onclick=endTurn;
+}
+
+// ---------- INIT ----------
+(function init(){
+  const inp = document.getElementById('nameInput');
+  const btn = document.getElementById('joinBtn');
+  const rb  = document.getElementById('resetBtn');
+  btn.onclick = joinLobby;
+  rb.onclick = resetRoom;
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter') joinLobby(); });
+  render();
+  connectMQTT();
+  // Nếu 9s vẫn chưa kết nối, cảnh báo để người dùng biết mạng có thể bị chặn.
+  setTimeout(()=>{ if(!connected) setSyncError(true); }, 9000);
+})();
+</script>
+</body>
+</html>
