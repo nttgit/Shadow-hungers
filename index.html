@@ -219,6 +219,7 @@ function startGame(){
     s.players[id] = { name:s.players[id].name, faction:factions[i], maxHp, hp:maxHp, alive:true, location:null };
   });
   s.order = order; s.turnIdx = 0; s.round = 1; s.phase = 'playing'; s.log = [];
+  s.hasRolled = false; s.hasAttacked = false; s.lastRoll = null;
   pushLog(s, `Ván mới bắt đầu với ${order.length} người chơi! Vòng 1 — lượt của ${s.players[order[0]].name}.`);
   publishState(s); acting = false; render();
 }
@@ -228,30 +229,50 @@ function playersAt(s, locId, excludeId){
   return s.order.filter(id => s.players[id].alive && s.players[id].location===locId && id!==excludeId);
 }
 
-function moveTo(locId){
+// d6 + d4 (tổng 2..10) quyết định vùng, giống Shadow Hunters
+function sumToLoc(sum){
+  if(sum<=3) return 'chapel';   // 2,3
+  if(sum<=5) return 'grave';    // 4,5
+  if(sum===6) return 'cabin';   // 6
+  if(sum===7) return 'woods';   // 7
+  if(sum===8) return 'tower';   // 8
+  return 'cave';                // 9,10
+}
+
+function rollMove(){
   if(acting) return; acting = true;
   let s = cur();
-  const me = s.players[myId];
+  // Chặn lượt chặt: chỉ người tới lượt, còn sống, và CHƯA tung mới được đi.
+  if(!s || s.phase!=='playing' || currentTurnId(s)!==myId || s.hasRolled || !s.players[myId] || !s.players[myId].alive){
+    acting = false; render(); return;
+  }
+  const d6 = 1 + Math.floor(Math.random()*6);
+  const d4 = 1 + Math.floor(Math.random()*4);
+  const sum = d6 + d4;
+  const locId = sumToLoc(sum);
   const loc = LOCATIONS.find(l=>l.id===locId);
+  const me = s.players[myId];
   me.location = locId;
+  s.hasRolled = true;
+  s.lastRoll = { by: myId, name: me.name, d6, d4, sum, loc: locId };
   const others = playersAt(s, locId, myId);
-  let msg = `${me.name} di chuyển tới ${loc.name}.`;
+  let msg = `🎲 ${me.name} tung ${d6}+${d4}=${sum} → tới ${loc.name}.`;
   let peekTarget = null;
   if(loc.type==='white'){
-    const roll = Math.random();
-    if(roll < 0.4){ me.hp = clamp(me.hp+3,0,me.maxHp); msg += ` Rút thẻ Trắng: hồi 3 máu.`; }
-    else if(roll < 0.7){ me.hp = clamp(me.hp+1,0,me.maxHp); msg += ` Rút thẻ Trắng: hồi 1 máu.`; }
+    const r = Math.random();
+    if(r < 0.4){ me.hp = clamp(me.hp+3,0,me.maxHp); msg += ` Thẻ Trắng: hồi 3 máu.`; }
+    else if(r < 0.7){ me.hp = clamp(me.hp+1,0,me.maxHp); msg += ` Thẻ Trắng: hồi 1 máu.`; }
     else {
-      if(others.length>0){ const t=pick(others); s.players[t].hp=clamp(s.players[t].hp-2,0,s.players[t].maxHp); msg+=` Rút thẻ Trắng: gây 2 sát thương lên ${s.players[t].name}.`; checkDeath(s,t); }
-      else { me.hp=clamp(me.hp+2,0,me.maxHp); msg+=` Rút thẻ Trắng: hồi 2 máu (không có ai để tấn công).`; }
+      if(others.length>0){ const t=pick(others); s.players[t].hp=clamp(s.players[t].hp-2,0,s.players[t].maxHp); msg+=` Thẻ Trắng: gây 2 sát thương lên ${s.players[t].name}.`; checkDeath(s,t); }
+      else { me.hp=clamp(me.hp+2,0,me.maxHp); msg+=` Thẻ Trắng: hồi 2 máu.`; }
     }
   } else {
-    const roll = Math.random();
-    if(roll < 0.4){ me.hp=clamp(me.hp-3,0,me.maxHp); msg+=` Rút thẻ Đen: mất 3 máu.`; checkDeath(s,myId); }
-    else if(roll < 0.7){ me.hp=clamp(me.hp-1,0,me.maxHp); msg+=` Rút thẻ Đen: mất 1 máu.`; checkDeath(s,myId); }
+    const r = Math.random();
+    if(r < 0.4){ me.hp=clamp(me.hp-3,0,me.maxHp); msg+=` Thẻ Đen: mất 3 máu.`; checkDeath(s,myId); }
+    else if(r < 0.7){ me.hp=clamp(me.hp-1,0,me.maxHp); msg+=` Thẻ Đen: mất 1 máu.`; checkDeath(s,myId); }
     else {
-      if(others.length>0){ const t=pick(others); peekTarget=s.players[t]; msg+=` Rút thẻ Đen: bạn nhìn trộm được phe của một người ở đây.`; }
-      else { me.hp=clamp(me.hp-1,0,me.maxHp); msg+=` Rút thẻ Đen: mất 1 máu (không có ai ở đây).`; checkDeath(s,myId); }
+      if(others.length>0){ const t=pick(others); peekTarget=s.players[t]; msg+=` Thẻ Đen: nhìn trộm được phe của một người ở đây.`; }
+      else { me.hp=clamp(me.hp-1,0,me.maxHp); msg+=` Thẻ Đen: mất 1 máu.`; checkDeath(s,myId); }
     }
   }
   pushLog(s, msg);
@@ -263,9 +284,13 @@ function moveTo(locId){
 function attack(targetId){
   if(acting) return; acting = true;
   let s = cur();
+  // Chỉ tấn công được khi: tới lượt, ĐÃ tung (đã di chuyển), và CHƯA tấn công trong lượt.
+  if(!s || s.phase!=='playing' || currentTurnId(s)!==myId || !s.hasRolled || s.hasAttacked){ acting=false; render(); return; }
   const me = s.players[myId], t = s.players[targetId];
+  if(!t || !t.alive || t.location!==me.location){ acting=false; render(); return; }
   const dmg = 2 + Math.floor(Math.random()*3);
   t.hp = clamp(t.hp-dmg,0,t.maxHp);
+  s.hasAttacked = true;
   pushLog(s, `⚔️ ${me.name} tấn công ${t.name}, gây ${dmg} sát thương.`);
   checkDeath(s, targetId); checkWin(s);
   publishState(s); acting = false; render();
@@ -297,11 +322,12 @@ function checkWin(s){
 function endTurn(){
   if(acting) return; acting = true;
   let s = cur();
-  if(s.phase!=='playing'){ acting=false; return; }
+  if(!s || s.phase!=='playing' || currentTurnId(s)!==myId){ acting=false; render(); return; }
   let next = s.turnIdx, guard = 0;
   do{ next=(next+1)%s.order.length; guard++; if(next===0) s.round++; }
   while(!s.players[s.order[next]].alive && guard <= s.order.length*2);
   s.turnIdx = next;
+  s.hasRolled = false; s.hasAttacked = false; // reset cho người kế tiếp
   pushLog(s, `➡️ Vòng ${s.round} — lượt của ${s.players[s.order[next]].name}.`);
   checkWin(s);
   publishState(s); acting = false; render();
@@ -395,21 +421,45 @@ function render(){
     return;
   }
   const myTurn = currentTurnId(s)===myId && me.alive;
+  // Bảng vùng chỉ để xem ai đang ở đâu (di chuyển bằng xúc xắc, không bấm để đi nữa).
   const board = LOCATIONS.map(loc=>{
     const here = playersAt(s, loc.id, null).map(id=>{
       const p=s.players[id]; const pct=Math.round(p.hp/p.maxHp*100);
       return `<div class="player-pill"><span>${p.name}${id===myId?' (bạn)':''}</span><span class="bar"><span class="bar-fill" style="width:${pct}%"></span></span></div>`;
     }).join('');
-    return `<div class="card" style="padding:10px 12px;">
-      <button class="btn-loc ${me.location===loc.id?'here':''}" ${myTurn?'':'disabled'} onclick="moveTo('${loc.id}')" style="width:100%;">
-        ${loc.type==='white'?'☀️':'🌑'} ${loc.name} <small>${loc.type==='white'?'Thẻ Trắng':'Thẻ Đen'}</small>
-      </button>${here}</div>`;
+    return `<div class="card ${me.location===loc.id?'':''}" style="padding:10px 12px;${me.location===loc.id?'border-color:var(--gold);':''}">
+      <div style="font-weight:600;margin-bottom:4px;">${loc.type==='white'?'☀️':'🌑'} ${loc.name} <small class="muted">· ${loc.type==='white'?'Thẻ Trắng':'Thẻ Đen'}</small></div>
+      ${here || '<div class="muted" style="font-size:.78rem;">(trống)</div>'}</div>`;
   }).join('');
-  const othersHere = playersAt(s, me.location, myId);
-  const attackBtns = (myTurn && me.location && othersHere.length>0) ? `
-    <div class="card"><div class="muted" style="margin-bottom:6px;">Tấn công người cùng khu vực:</div>
-      <div class="row">${othersHere.map(id=>`<button class="btn-target" onclick="attack('${id}')">⚔️ ${s.players[id].name}</button>`).join('')}</div>
+
+  // Kết quả xúc xắc gần nhất (mọi người đều thấy)
+  const lr = s.lastRoll;
+  const rollCard = lr ? `
+    <div class="card center">
+      <div class="muted" style="font-size:.75rem;">${lr.name} vừa tung</div>
+      <div style="font-size:1.6rem;font-weight:800;letter-spacing:2px;">🎲 ${lr.d6} + ${lr.d4} = ${lr.sum}</div>
+      <div class="muted">→ ${LOCATIONS.find(l=>l.id===lr.loc)?.name || ''}</div>
     </div>` : '';
+
+  // Khu vực điều khiển theo đúng thứ tự lượt
+  let controls = '';
+  if(myTurn){
+    if(!s.hasRolled){
+      controls = `<button class="btn-gold" id="rollBtn" style="width:100%;font-size:1.05rem;">🎲 Tung Xúc Xắc Để Di Chuyển</button>`;
+    } else {
+      const othersHere = playersAt(s, me.location, myId);
+      let atk = '';
+      if(!s.hasAttacked && othersHere.length>0){
+        atk = `<div class="card"><div class="muted" style="margin-bottom:6px;">Tấn công người cùng khu vực (1 lần/lượt):</div>
+          <div class="row">${othersHere.map(id=>`<button class="btn-target" onclick="attack('${id}')">⚔️ ${s.players[id].name}</button>`).join('')}</div></div>`;
+      } else if(s.hasAttacked){
+        atk = `<div class="card center muted" style="font-size:.78rem;">Đã tấn công trong lượt này.</div>`;
+      }
+      controls = atk + `<button class="btn-gold" id="endTurnBtn" style="width:100%;">Kết Thúc Lượt ➡️</button>`;
+    }
+  } else {
+    controls = `<div class="card center muted" style="font-size:.82rem;">Đang chờ <b>${s.players[currentTurnId(s)].name}</b> chơi...</div>`;
+  }
 
   app.innerHTML = `
     <div class="card">
@@ -417,12 +467,13 @@ function render(){
       <div class="center">Máu: <span class="hp-num">${me.hp}</span> / ${me.maxHp}</div>
       <div class="center muted" style="margin-top:4px;">Vòng ${s.round} · Lượt của: <b>${s.players[currentTurnId(s)].name}</b> ${myTurn?'(BẠN)':''}</div>
     </div>
+    ${rollCard}
+    ${controls}
     ${board}
-    ${attackBtns}
-    ${myTurn ? `<button class="btn-gold" id="endTurnBtn" style="width:100%;">Kết Thúc Lượt ➡️</button>` : ''}
     <div class="card"><div class="muted" style="margin-bottom:6px;">Diễn biến:</div>
       <div class="log">${s.log.slice().reverse().map(l=>`<div>${l}</div>`).join('')}</div></div>
     <div class="card center muted" style="font-size:.75rem;">Người còn sống: ${s.order.filter(id=>s.players[id].alive).length}/${s.order.length}</div>`;
+  const rl=document.getElementById('rollBtn'); if(rl) rl.onclick=rollMove;
   const et=document.getElementById('endTurnBtn'); if(et) et.onclick=endTurn;
 }
 
