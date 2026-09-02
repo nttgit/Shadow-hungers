@@ -89,14 +89,23 @@ const LOCATIONS = [
 ];
 // Thẻ Xanh (Ảo Ảnh): đưa cho 1 người để dò phe. Sát thương công khai -> lộ manh mối phe.
 const VISION_CARDS = [
-  {name:'Ảo Ảnh Thù Hận',  dmg:{hunter:2, shadow:0, neutral:0}},
-  {name:'Ảo Ảnh Bóng Đêm', dmg:{hunter:0, shadow:2, neutral:0}},
-  {name:'Ảo Ảnh Cô Độc',   dmg:{hunter:0, shadow:0, neutral:3}},
-  {name:'Ảo Ảnh Đau Thương',dmg:{hunter:1, shadow:1, neutral:2}},
-  {name:'Ảo Ảnh Sáng Tối', dmg:{hunter:2, shadow:2, neutral:0}},
-  {name:'Ảo Ảnh Bất An',   dmg:{hunter:1, shadow:1, neutral:0}},
+  {name:'Ảo Ảnh Thù Hận',  desc:'Nếu là Thợ Săn: -2 máu.',              dmg:{hunter:2, shadow:0, neutral:0}},
+  {name:'Ảo Ảnh Bóng Đêm', desc:'Nếu là Bóng Tối: -2 máu.',             dmg:{hunter:0, shadow:2, neutral:0}},
+  {name:'Ảo Ảnh Cô Độc',   desc:'Nếu là Trung Lập: -3 máu.',            dmg:{hunter:0, shadow:0, neutral:3}},
+  {name:'Ảo Ảnh Đau Thương',desc:'Thợ Săn/Bóng Tối: -1 máu · Trung Lập: -2 máu.', dmg:{hunter:1, shadow:1, neutral:2}},
+  {name:'Ảo Ảnh Sáng Tối', desc:'Thợ Săn/Bóng Tối: -2 máu (Trung Lập không sao).', dmg:{hunter:2, shadow:2, neutral:0}},
+  {name:'Ảo Ảnh Bất An',   desc:'Thợ Săn/Bóng Tối: -1 máu (Trung Lập không sao).', dmg:{hunter:1, shadow:1, neutral:0}},
 ];
 const FACTION_TABLE = {2:[1,1,0],3:[1,1,1],4:[2,1,1],5:[2,2,1],6:[3,2,1],7:[3,2,2],8:[4,2,2]};
+
+// Vai Trung Lập: mỗi vai có điều kiện thắng riêng (tính lúc ván kết thúc).
+const NEUTRAL_ROLES = {
+  allie:     {name:'Allie',     goal:'Còn sống khi ván kết thúc.'},
+  daniel:    {name:'Daniel',    goal:'Là người gục ĐẦU TIÊN, hoặc còn sống khi toàn bộ phe Bóng Tối đã chết.'},
+  catherine: {name:'Catherine', goal:'Còn sống VÀ có ít nhất 2 người chơi khác đã gục.'},
+  bob:       {name:'Bob',       goal:'Tự tay hạ gục (đánh chết) ít nhất 1 người chơi.'},
+};
+const NEUTRAL_POOL = ['allie','daniel','catherine','bob'];
 const MAX_PLAYERS = 8, MIN_PLAYERS = 2, MAX_ROUNDS = 15;
 
 const BROKER = 'wss://broker.emqx.io:8084/mqtt';
@@ -246,11 +255,16 @@ function startGame(){
   for(let i=0;i<nn;i++) factions.push('neutral');
   factions = shuffle(factions);
   const order = shuffle(ids);
+  const neutralRoles = shuffle(NEUTRAL_POOL);
+  let nIdx = 0;
   order.forEach((id,i)=>{
     const maxHp = 8 + Math.floor(Math.random()*5);
-    s.players[id] = { name:s.players[id].name, faction:factions[i], maxHp, hp:maxHp, alive:true, location:null };
+    const faction = factions[i];
+    const p = { name:s.players[id].name, faction, maxHp, hp:maxHp, alive:true, location:null, kills:0 };
+    if(faction==='neutral'){ p.neutralRole = neutralRoles[nIdx % neutralRoles.length]; nIdx++; }
+    s.players[id] = p;
   });
-  s.order = order; s.turnIdx = 0; s.round = 1; s.phase = 'playing'; s.log = [];
+  s.order = order; s.turnIdx = 0; s.round = 1; s.phase = 'playing'; s.log = []; s.deathOrder = [];
   s.hasRolled = false; s.hasAttacked = false; s.lastRoll = null; s.pendingVision = false;
   pushLog(s, `Ván mới bắt đầu với ${order.length} người chơi! Vòng 1 — lượt của ${s.players[order[0]].name}.`);
   publishState(s); acting = false; render();
@@ -300,7 +314,7 @@ function rollMove(){
     if(r < 0.4){ me.hp = clamp(me.hp+3,0,me.maxHp); msg += ` Thẻ Trắng: hồi 3 máu.`; }
     else if(r < 0.7){ me.hp = clamp(me.hp+1,0,me.maxHp); msg += ` Thẻ Trắng: hồi 1 máu.`; }
     else {
-      if(others.length>0){ const t=pick(others); s.players[t].hp=clamp(s.players[t].hp-2,0,s.players[t].maxHp); msg+=` Thẻ Trắng: gây 2 sát thương lên ${s.players[t].name}.`; checkDeath(s,t); }
+      if(others.length>0){ const t=pick(others); s.players[t].hp=clamp(s.players[t].hp-2,0,s.players[t].maxHp); msg+=` Thẻ Trắng: gây 2 sát thương lên ${s.players[t].name}.`; checkDeath(s,t,myId); }
       else { me.hp=clamp(me.hp+2,0,me.maxHp); msg+=` Thẻ Trắng: hồi 2 máu.`; }
     }
   } else {
@@ -330,7 +344,7 @@ function attack(targetId){
   t.hp = clamp(t.hp-dmg,0,t.maxHp);
   s.hasAttacked = true;
   pushLog(s, `⚔️ ${me.name} tấn công ${t.name}, gây ${dmg} sát thương.`);
-  checkDeath(s, targetId); checkWin(s);
+  checkDeath(s, targetId, myId); checkWin(s);
   autoAdvanceIfStuck(s);
   publishState(s); acting = false; render();
 }
@@ -343,36 +357,82 @@ function giveVision(targetId){
   if(!t || !t.alive || targetId===myId){ acting=false; render(); return; }
   const card = pick(VISION_CARDS);
   const d = card.dmg[t.faction] || 0;
-  if(d>0){ t.hp = clamp(t.hp-d,0,t.maxHp); pushLog(s, `🟢 ${me.name} đưa "${card.name}" cho ${t.name} → ${t.name} mất ${d} máu.`); checkDeath(s,targetId); }
-  else { pushLog(s, `🟢 ${me.name} đưa "${card.name}" cho ${t.name} → ${t.name} không hề hấn gì.`); }
+  const result = d>0 ? `${t.name} mất ${d} máu` : `${t.name} không hề hấn gì`;
+  if(d>0){ t.hp = clamp(t.hp-d,0,t.maxHp); checkDeath(s,targetId,myId); }
+  pushLog(s, `🟢 ${me.name} đưa thẻ "${card.name}" (${card.desc}) cho ${t.name} → ${result}.`);
   s.pendingVision = false;
   checkWin(s);
   autoAdvanceIfStuck(s);
   publishState(s); acting = false; render();
 }
 
-function checkDeath(s, id){
+function checkDeath(s, id, killerId){
   const p = s.players[id];
-  if(p.hp<=0 && p.alive){ p.alive=false; pushLog(s, `💀 ${p.name} đã gục ngã! (Phe: ${factionLabel(p.faction)})`); }
+  if(p.hp<=0 && p.alive){
+    p.alive=false;
+    if(!s.deathOrder) s.deathOrder=[];
+    s.deathOrder.push(id);
+    if(killerId && killerId!==id && s.players[killerId]){ s.players[killerId].kills = (s.players[killerId].kills||0) + 1; }
+    pushLog(s, `💀 ${p.name} đã gục ngã! (Phe: ${factionLabel(p.faction)})`);
+  }
 }
 function factionLabel(f){ return f==='hunter'?'Thợ Săn':f==='shadow'?'Bóng Tối':'Trung Lập'; }
+function roleTitle(p){ return p.faction==='neutral' && p.neutralRole ? `Trung Lập · ${NEUTRAL_ROLES[p.neutralRole].name}` : factionLabel(p.faction); }
+function goalText(p){
+  if(p.faction==='hunter') return 'Tiêu diệt hết phe Bóng Tối.';
+  if(p.faction==='shadow') return 'Tiêu diệt hết phe Thợ Săn.';
+  return (p.neutralRole && NEUTRAL_ROLES[p.neutralRole]) ? NEUTRAL_ROLES[p.neutralRole].goal : 'Sống sót đến khi ván kết thúc.';
+}
+// Kiểm tra 1 người Trung Lập có thắng không (tính ở thời điểm ván kết thúc)
+function neutralWon(s, id){
+  const p = s.players[id];
+  const deaths = s.deathOrder || [];
+  const shadowsAllDead = s.order.filter(x=>s.players[x].faction==='shadow').every(x=>!s.players[x].alive);
+  const otherDeaths = deaths.filter(x=>x!==id).length;
+  switch(p.neutralRole){
+    case 'allie':     return p.alive;
+    case 'daniel':    return (deaths[0]===id) || (p.alive && shadowsAllDead);
+    case 'catherine': return p.alive && otherDeaths >= 2;
+    case 'bob':       return (p.kills||0) >= 1;
+    default:          return p.alive;
+  }
+}
 
 function checkWin(s){
   if(s.phase!=='playing') return;
-  const alive = s.order.filter(id=>s.players[id].alive);
-  const h = alive.filter(id=>s.players[id].faction==='hunter');
-  const sh = alive.filter(id=>s.players[id].faction==='shadow');
-  let winner = null;
-  if(alive.length===0){ s.phase='ended'; s.winner='draw'; pushLog(s,'🏁 Tất cả đều gục ngã — hòa!'); return; }
-  if(sh.length===0 && h.length>0) winner='hunter';
-  else if(h.length===0 && sh.length>0) winner='shadow';
-  else if(h.length===0 && sh.length===0 && alive.length>0) winner='neutral';
-  if(!winner && s.round >= MAX_ROUNDS){
-    const hHp = h.reduce((a,id)=>a+s.players[id].hp,0);
-    const sHp = sh.reduce((a,id)=>a+s.players[id].hp,0);
-    winner = hHp>=sHp ? 'hunter' : 'shadow';
+  const aliveIds = s.order.filter(id=>s.players[id].alive);
+  const h = aliveIds.filter(id=>s.players[id].faction==='hunter');
+  const sh = aliveIds.filter(id=>s.players[id].faction==='shadow');
+
+  if(aliveIds.length===0){
+    s.phase='ended'; s.winner='draw';
+    s.order.forEach(id=> s.players[id].won=false);
+    pushLog(s,'🏁 Tất cả đều gục ngã — hòa!');
+    return;
   }
-  if(winner){ s.phase='ended'; s.winner=winner; pushLog(s, `🏁 Trò chơi kết thúc! Phe ${factionLabel(winner)} chiến thắng!`); }
+
+  let factionWinner = null, ended = false;
+  if(sh.length===0 && h.length>0){ factionWinner='hunter'; ended=true; }
+  else if(h.length===0 && sh.length>0){ factionWinner='shadow'; ended=true; }
+  else if(h.length===0 && sh.length===0){ factionWinner='neutral'; ended=true; } // chỉ còn Trung Lập
+  else if(s.round >= MAX_ROUNDS){
+    const hHp=h.reduce((a,id)=>a+s.players[id].hp,0);
+    const sHp=sh.reduce((a,id)=>a+s.players[id].hp,0);
+    factionWinner = hHp>=sHp ? 'hunter' : 'shadow'; ended=true;
+  }
+  if(!ended) return;
+
+  // Thắng/thua từng người: phe theo factionWinner; Trung Lập theo điều kiện riêng của vai.
+  s.order.forEach(id=>{
+    const p=s.players[id];
+    if(p.faction==='neutral') p.won = neutralWon(s, id);
+    else p.won = (p.faction===factionWinner);
+  });
+  s.phase='ended'; s.winner=factionWinner;
+  const neutralWinners = s.order.filter(id=>s.players[id].faction==='neutral' && s.players[id].won).map(id=>s.players[id].name);
+  let msg = factionWinner==='neutral' ? '🏁 Chỉ còn phe Trung Lập — Trung Lập chiến thắng!' : `🏁 Phe ${factionLabel(factionWinner)} chiến thắng!`;
+  if(factionWinner!=='neutral' && neutralWinners.length>0) msg += ` Trung Lập đạt mục tiêu: ${neutralWinners.join(', ')}.`;
+  pushLog(s, msg);
 }
 
 // Chuyển lượt sang người còn sống kế tiếp
@@ -448,7 +508,7 @@ function maybeToast(s){
   if(lastLogSeen === -1 || s.log.length < lastLogSeen){ lastLogSeen = s.log.length; return; }
   if(s.log.length <= lastLogSeen) return;
   const pending = s.log.slice(lastLogSeen);
-  const boundary = pending.some(l => l.includes('lượt của') || l.includes('🏁'));
+  const boundary = pending.some(l => l.includes('lượt của') || l.includes('🏁') || l.includes('🟢'));
   if(!boundary) return; // lượt chưa xong, chờ thêm diễn biến
   showToast(pending);
   lastLogSeen = s.log.length;
@@ -493,11 +553,22 @@ function render(){
   if(s.phase==='ended'){
     const results = s.order.map(id=>{
       const p=s.players[id];
-      return `<div class="player-pill"><span>${p.name}${id===myId?' 👑':''}</span><span class="tag tag-${p.faction}">${factionLabel(p.faction)}</span></div>`;
+      const won = p.won===true;
+      return `<div class="player-pill" style="${won?'border:1px solid var(--gold);':'opacity:.7;'}">
+        <span>${won?'👑 ':''}${p.name}${id===myId?' (bạn)':''} ${p.alive?'':'💀'}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span class="tag tag-${p.faction}">${p.faction==='neutral'&&p.neutralRole?NEUTRAL_ROLES[p.neutralRole].name:factionLabel(p.faction)}</span>
+          <span style="font-size:.72rem;font-weight:800;color:${won?'#2ecc71':'#ff8f9a'};">${won?'THẮNG':'THUA'}</span>
+        </span></div>`;
     }).join('');
+    const banner = s.winner==='draw' ? '🤝 HÒA — TẤT CẢ ĐỀU GỤC'
+                 : `🏆 PHE ${factionLabel(s.winner).toUpperCase()} CHIẾN THẮNG!`;
+    const bannerBg = s.winner==='draw' ? '#555' : `var(--${s.winner})`;
+    const iWon = s.players[myId] && s.players[myId].won===true;
     app.innerHTML = `
       <div class="card center">
-        <div class="role-badge" style="background:var(--${s.winner});color:#fff;">🏆 PHE ${factionLabel(s.winner).toUpperCase()} CHIẾN THẮNG!</div>
+        <div class="role-badge" style="background:${bannerBg};color:#fff;">${banner}</div>
+        <div class="center" style="font-weight:800;margin-bottom:8px;color:${iWon?'#2ecc71':'#ff8f9a'};">${iWon?'🎉 Bạn đã THẮNG!':'Bạn đã thua ván này.'}</div>
         ${results}
         <button class="btn-main" id="newRoundBtn" style="margin-top:10px;">Chơi Ván Mới</button>
       </div>
@@ -562,7 +633,7 @@ function render(){
       controls = `<button class="btn-gold" id="rollBtn" style="width:100%;font-size:1.05rem;">🎲 Tung Xúc Xắc Để Di Chuyển</button>`;
     } else if(s.pendingVision){
       const targets = s.order.filter(id=>id!==myId && s.players[id].alive);
-      controls = `<div class="card"><div class="muted" style="margin-bottom:6px;">🟢 Thẻ Xanh — chọn 1 người để đưa thẻ Ảo Ảnh (dò phe):</div>
+      controls = `<div class="card"><div class="muted" style="margin-bottom:6px;">🟢 Thẻ Xanh — chọn 1 người để đưa thẻ Ảo Ảnh (thẻ rút ngẫu nhiên, kết quả sẽ hiện popup cho mọi người):</div>
         <div class="row">${targets.map(id=>`<button class="btn-target" style="border-color:#43c59e;color:#9ff0d6;" onclick="giveVision('${id}')">🟢 ${s.players[id].name}</button>`).join('')}</div></div>`;
     } else {
       const othersHere = playersAt(s, me.location, myId);
@@ -581,7 +652,8 @@ function render(){
 
   app.innerHTML = `
     <div class="card">
-      <div class="role-badge tag-${me.faction}" style="background:var(--${me.faction});color:#fff;">Vai trò của bạn: ${factionLabel(me.faction)}</div>
+      <div class="role-badge tag-${me.faction}" style="background:var(--${me.faction});color:#fff;">Vai trò của bạn: ${roleTitle(me)}</div>
+      <div class="center muted" style="font-size:.78rem;margin-bottom:4px;">🎯 Mục tiêu: ${goalText(me)}</div>
       <div class="center">Máu: <span class="hp-num">${me.hp}</span> / ${me.maxHp}</div>
       <div class="center muted" style="margin-top:4px;">Vòng ${s.round} · Lượt của: <b>${s.players[currentTurnId(s)].name}</b> ${myTurn?'(BẠN)':''}</div>
     </div>
