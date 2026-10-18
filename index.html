@@ -2,846 +2,923 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Săn Bóng Tối</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js" onerror="window.__mqttFail=true"></script>
 <style>
-  :root{--bg:#0f0e17;--panel:#1a1825;--panel2:#211f30;--accent:#e63946;--gold:#f4a261;--text:#f2f2f2;--muted:#9a95ab;--hunter:#4ea8de;--shadow:#e63946;--neutral:#9b5de5;}
+  :root{--bg:#0f0e17;--panel:#1a1825;--panel2:#242134;--line:#352f4d;--accent:#e63946;--gold:#f4a261;--text:#f2f2f2;--muted:#9a95ab;--hunter:#4ea8de;--shadow:#e63946;--neutral:#9b5de5;--green:#2ecc71;color-scheme:dark;}
   *{box-sizing:border-box;}
-  body{margin:0;background:radial-gradient(circle at 50% 0%,#241f38,#0f0e17 60%);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;padding:14px;}
-  h1{font-size:1.35rem;text-align:center;margin:4px 0 2px;letter-spacing:1px;color:var(--gold);}
-  .sub{text-align:center;color:var(--muted);font-size:.78rem;margin-bottom:12px;}
-  .card{background:var(--panel);border:1px solid #322d47;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 4px 14px rgba(0,0,0,.3);}
-  input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid #3d3757;background:var(--panel2);color:var(--text);font-size:1rem;}
-  button{border:none;border-radius:10px;padding:11px 13px;font-size:.92rem;font-weight:600;cursor:pointer;margin:4px 4px 4px 0;transition:transform .1s;}
+  html{scroll-padding-top:env(safe-area-inset-top,0px);}
+  body{margin:0;background:radial-gradient(circle at 50% 0%,#241f38,#0f0e17 60%);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh;padding:calc(10px + env(safe-area-inset-top,0px)) 12px calc(24px + env(safe-area-inset-bottom,0px));line-height:1.4;}
+  h1{font-size:1.3rem;text-align:center;margin:2px 0 0;letter-spacing:2px;color:var(--gold);}
+  .sub{text-align:center;color:var(--muted);font-size:.76rem;margin-bottom:8px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 13px;margin-bottom:10px;}
+  .card.private{border-color:var(--green);background:#13211b;}
+  .card.turn{border-color:var(--gold);}
+  input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid #3d3757;background:var(--panel2);color:var(--text);font-size:1rem;margin-top:6px;}
+  button{border:none;border-radius:10px;padding:11px 13px;font-size:.92rem;font-weight:600;cursor:pointer;margin:4px 4px 4px 0;transition:transform .1s;font-family:inherit;}
   button:active{transform:scale(.96);}
+  button:disabled{opacity:.45;cursor:not-allowed;}
+  button:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
   .btn-main{background:linear-gradient(135deg,var(--accent),#b5202b);color:#fff;width:100%;}
-  .btn-main:disabled{background:#3a3550;color:#77718f;cursor:not-allowed;}
   .btn-gold{background:var(--gold);color:#241a0a;width:100%;}
   .btn-blue{background:#2b6cb0;color:#fff;}
   .btn-ghost{background:transparent;color:var(--muted);border:1px solid #443e63;}
   .btn-target{background:#3a1622;color:#ffb4b4;border:1px solid var(--accent);}
-  .btn-heal{background:#123a2a;color:#9ff0d6;border:1px solid #2ecc71;}
-  .row{display:flex;flex-wrap:wrap;gap:6px;}
-  .pill{display:flex;justify-content:space-between;align-items:center;background:var(--panel2);border-radius:10px;padding:8px 10px;margin-bottom:6px;font-size:.88rem;}
-  .tag{font-size:.62rem;padding:2px 7px;border-radius:20px;font-weight:700;text-transform:uppercase;}
+  .btn-heal{background:#123a2a;color:#9ff0d6;border:1px solid var(--green);}
+  .btn-sm{padding:6px 10px;font-size:.78rem;margin:2px;}
+  .row{display:flex;flex-wrap:wrap;gap:4px;}
+  .between{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .pill{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:var(--panel2);border-radius:10px;padding:8px 10px;margin-bottom:6px;font-size:.88rem;}
+  .pill.dead{opacity:.5;}
+  .tag{font-size:.62rem;padding:2px 7px;border-radius:20px;font-weight:700;white-space:nowrap;}
   .tag-hunter{background:var(--hunter);color:#04263e;}.tag-shadow{background:var(--shadow);color:#3d0006;}.tag-neutral{background:var(--neutral);color:#1e0730;}.tag-you{background:var(--gold);color:#241a0a;}
   .muted{color:var(--muted);font-size:.8rem;}
-  .log{max-height:150px;overflow-y:auto;font-size:.8rem;color:#c9c3e0;background:#161320;border-radius:10px;padding:8px 10px;}
+  .small{font-size:.74rem;}
+  .log{max-height:170px;overflow-y:auto;font-size:.8rem;color:#c9c3e0;background:#161320;border-radius:10px;padding:8px 10px;}
   .log div{margin-bottom:3px;}
   .center{text-align:center;}
-  .role-badge{font-size:1rem;font-weight:800;text-align:center;padding:9px;border-radius:12px;margin-bottom:6px;}
-  #status{font-size:.72rem;text-align:center;color:var(--muted);margin-bottom:8px;}
+  .role-badge{font-size:1rem;font-weight:800;text-align:center;padding:9px;border-radius:12px;margin-bottom:6px;color:#fff;}
+  #status{font-size:.72rem;text-align:center;color:var(--muted);margin-bottom:6px;}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;}
-  .dot-on{background:#2ecc71;}.dot-off{background:#e63946;}.dot-wait{background:#f4a261;}
-  .area-card{background:var(--panel2);border:1px solid #3a3557;border-radius:10px;padding:8px 10px;margin-bottom:6px;}
-  .area-card.here{border-color:var(--gold);}
-  .zone-tag{font-size:.6rem;color:var(--muted);}
+  .dot-on{background:var(--green);}.dot-off{background:var(--accent);}.dot-wait{background:var(--gold);}
+  .area-card{background:var(--panel2);border:1px dashed #3a3452;border-radius:10px;padding:8px 10px;margin-top:6px;}
+  .area-card.here{border:1px solid var(--gold);background:#2a2236;}
+  .zone-tag{font-size:.68rem;color:var(--gold);font-weight:700;margin-bottom:2px;}
+  .chip{display:inline-block;background:#2f2a44;border:1px solid #4a4370;color:#e8e4f5;border-radius:14px;padding:2px 9px;font-size:.72rem;margin:2px 3px 2px 0;cursor:pointer;}
+  .chip:active{background:#3f3860;}
+  .hpbar{height:8px;border-radius:6px;background:#3a3550;overflow:hidden;margin:6px 0 2px;}
+  .hpbar i{display:block;height:100%;background:linear-gradient(90deg,var(--green),#a8e063);}
+  .steps{display:flex;gap:4px;margin-bottom:8px;}
+  .steps span{flex:1;text-align:center;font-size:.7rem;padding:5px 2px;border-radius:8px;background:#201c2e;color:var(--muted);}
+  .steps span.on{background:var(--gold);color:#241a0a;font-weight:700;}
+  .steps span.done{background:#2a3a2f;color:#9ff0d6;}
+  .cardbox{background:#0f1a14;border:1px solid var(--green);border-radius:10px;padding:9px 11px;margin:6px 0;font-size:.86rem;}
+  .cardbox b{color:#9ff0d6;}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:flex-end;justify-content:center;}
+  .modal[hidden]{display:none;}
+  .modal-box{background:var(--panel);border:1px solid var(--line);border-radius:16px 16px 0 0;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;padding:12px 14px calc(16px + env(safe-area-inset-bottom,0px));}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--panel);padding-bottom:6px;}
+  .modal h3{font-size:.95rem;color:var(--gold);margin:12px 0 4px;}
+  .modal p{margin:3px 0;font-size:.82rem;}
+  .toast{pointer-events:auto;max-width:520px;width:100%;background:#241f38;border:1px solid var(--gold);border-radius:14px;padding:9px 13px;box-shadow:0 10px 30px rgba(0,0,0,.6);animation:toastIn .2s ease;cursor:pointer;font-size:.84rem;color:#e8e4f5;}
+  .toast.green{border-color:var(--green);background:#13211b;}
   @keyframes toastIn{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
+  @media (prefers-reduced-motion:reduce){.toast{animation:none;}button{transition:none;}}
 </style>
 </head>
 <body>
 <h1>🌘 SĂN BÓNG TỐI</h1>
-<div class="sub">Bản đầy đủ theo luật Shadow Hunters · chơi trên điện thoại</div>
+<div class="sub">Theo luật Shadow Hunters · 4–8 người · chơi trên điện thoại</div>
 <div id="syncBanner" style="display:none;background:#4a1620;border:1px solid var(--accent);color:#ffb4b4;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:.82rem;text-align:center;">
-  ⚠️ Chưa kết nối được máy chủ đồng bộ. Hãy host file ở nơi bình thường (Vercel/Netlify) rồi mở link đó.
+  ⚠️ Chưa kết nối được máy chủ đồng bộ. Kiểm tra mạng, hoặc host file ở nơi bình thường (Vercel/Netlify) rồi mở link đó.
 </div>
-<div id="status"><span class="dot dot-wait"></span>Đang kết nối...</div>
+<div id="status"><span class="dot dot-wait"></span>Đang kết nối…</div>
 <div id="nameScreen">
   <div class="card">
-    <p class="muted">Nhập tên để tham gia (mỗi lúc 1 ván; ván đang chơi thì vào hàng chờ).</p>
-    <input id="nameInput" type="text" maxlength="16" placeholder="Tên của bạn..." autocomplete="off" autocorrect="off" autocapitalize="off">
-    <button class="btn-main" id="joinBtn" style="margin-top:10px;">Tham Gia</button>
-    <button class="btn-ghost" id="resetBtn" style="width:100%;margin-top:8px;">Đặt lại phòng</button>
+    <p class="muted" style="margin:0;">Nhập tên và mã phòng. Cả nhóm dùng chung một mã phòng (3–8 chữ/số).</p>
+    <input id="nameInput" type="text" maxlength="16" placeholder="Tên của bạn" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input id="roomInput" type="text" maxlength="8" placeholder="Mã phòng, ví dụ: ABC123" autocomplete="off" autocorrect="off" autocapitalize="characters">
+    <button class="btn-main" id="joinBtn" style="margin-top:10px;">Vào phòng</button>
+    <button class="btn-ghost" id="rulesBtn0" style="width:100%;margin-top:6px;">📖 Xem luật và thẻ</button>
   </div>
 </div>
 <div id="app" style="display:none;"></div>
-<div id="toastStack" style="position:fixed;left:0;right:0;top:10px;z-index:100;padding:0 12px;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;"></div>
+<div id="toastStack" style="position:fixed;left:0;right:0;top:calc(10px + env(safe-area-inset-top,0px));z-index:100;padding:0 12px;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;"></div>
+<div id="modal" class="modal" hidden><div class="modal-box"><div class="modal-head"><b id="modalTitle"></b><button class="btn-ghost btn-sm" id="modalClose">✕ Đóng</button></div><div id="modalBody"></div></div></div>
 
 <script>
 // ================= DỮ LIỆU THEO LUẬT GỐC =================
-const CHARACTERS = {
-  emi:      {name:'Emi',      faction:'hunter', hp:10, power:'Di chuyển: có thể chọn thẳng 1 khu thay vì tung xúc xắc.'},
-  franklin: {name:'Franklin', faction:'hunter', hp:12, power:'1 lần/ván (đầu lượt): gây sát thương 1 người = xúc xắc 6 mặt.'},
-  george:   {name:'George',   faction:'hunter', hp:14, power:'1 lần/ván (đầu lượt): gây sát thương 1 người = xúc xắc 4 mặt.'},
-  unknown:  {name:'Unknown',  faction:'shadow', hp:11, power:'Khi nhận thẻ Ẩn Sĩ, có thể phớt lờ (không chịu hiệu ứng).'},
-  vampire:  {name:'Vampire',  faction:'shadow', hp:13, power:'Khi tấn công gây sát thương, hồi 2 máu.'},
-  werewolf: {name:'Werewolf', faction:'shadow', hp:14, power:'Khi bị tấn công gây sát thương, phản đòn ngay.'},
-  allie:    {name:'Allie',    faction:'neutral',hp:8,  power:'1 lần/ván: hồi đầy máu.'},
-  bob:      {name:'Bob',      faction:'neutral',hp:10, power:'Khi định gây ≥2 sát thương, có thể cướp 1 Trang Bị thay vì gây sát thương.'},
-  charles:  {name:'Charles',  faction:'neutral',hp:11, power:'Sau khi tấn công, có thể tự chịu 2 sát thương để tấn công lại.'},
-  daniel:   {name:'Daniel',   faction:'neutral',hp:13, power:'Khi có người chết, danh tính bạn tự lộ.'},
+const CHARACTERS={
+  emi:{name:'Emi',faction:'hunter',hp:10,power:'Dịch chuyển: khi di chuyển, thay vì tung xúc xắc có thể đi tới khu cặp với khu đang đứng, hoặc khu đối diện ở cặp kế bên.'},
+  franklin:{name:'Franklin',faction:'hunter',hp:12,power:'Sét đánh: 1 lần/ván, đầu lượt (trước khi tung di chuyển), chọn 1 người và tung d6 — người đó chịu sát thương bằng số tung.'},
+  george:{name:'George',faction:'hunter',hp:14,power:'Phá hủy: 1 lần/ván, đầu lượt (trước khi tung di chuyển), chọn 1 người và tung d4 — người đó chịu sát thương bằng số tung.'},
+  vampire:{name:'Vampire',faction:'shadow',hp:13,power:'Hút máu: khi đòn tấn công của bạn gây sát thương, hồi ngay 2 máu.'},
+  werewolf:{name:'Werewolf',faction:'shadow',hp:14,power:'Phản đòn: sau khi bị tấn công (trúng hay trượt) được phản đòn ngay người đó. Phải lộ diện từ trước thì game mới hỏi.'},
+  wight:{name:'Wight',faction:'shadow',hp:14,power:'Nhân bản: 1 lần/ván, lúc kết thúc lượt, được thêm số lượt bằng số người đã chết tại thời điểm đó.'},
+  allie:{name:'Allie',faction:'neutral',hp:8,power:'Tình mẫu tử: 1 lần/ván, hồi đầy máu. Dùng được bất cứ lúc nào.'},
+  bob:{name:'Bob',faction:'neutral',hp:10,power:'Cướp bóc: khi đòn đánh sẽ gây từ 2 sát thương, có thể cướp 1 trang bị (tự chọn) của nạn nhân thay vì gây sát thương.'},
+  charles:{name:'Charles',faction:'neutral',hp:11,power:'Tiệc máu: sau khi tấn công, có thể tự chịu 2 sát thương để đánh lại đúng người đó (lặp lại được).'},
+  daniel:{name:'Daniel',faction:'neutral',hp:13,power:'Thét: khi có người khác chết, bạn tự động lộ diện. Không được tự lộ diện lúc khác.'},
 };
-const WINCOND = {
-  emi:'Toàn bộ phe Bóng Tối chết.', franklin:'Toàn bộ phe Bóng Tối chết.', george:'Toàn bộ phe Bóng Tối chết.',
-  unknown:'Toàn bộ phe Thợ Săn chết, HOẶC 3 người Trung Lập chết.', vampire:'Toàn bộ phe Thợ Săn chết, HOẶC 3 người Trung Lập chết.', werewolf:'Toàn bộ phe Thợ Săn chết, HOẶC 3 người Trung Lập chết.',
+const WINCOND={
+  emi:'Toàn bộ phe Bóng Tối chết.',franklin:'Toàn bộ phe Bóng Tối chết.',george:'Toàn bộ phe Bóng Tối chết.',
+  vampire:'Toàn bộ phe Thợ Săn chết, HOẶC 3 người Trung Lập chết.',werewolf:'Toàn bộ phe Thợ Săn chết, HOẶC 3 người Trung Lập chết.',wight:'Toàn bộ phe Thợ Săn chết, HOẶC 3 người Trung Lập chết.',
   allie:'Còn sống khi ván kết thúc.',
-  bob:'Sở hữu 5+ thẻ Trang Bị.',
-  charles:'Đòn của bạn hạ gục 1 người VÀ tổng số người chết ≥ 3.',
-  daniel:'Là người chết ĐẦU TIÊN, HOẶC còn sống khi phe Thợ Săn thắng.',
+  bob:'Sở hữu từ 5 trang bị trở lên.',
+  charles:'Đòn tấn công của bạn hạ gục 1 người, và tính cả người đó thì tổng số người chết từ 3 trở lên.',
+  daniel:'Là người chết đầu tiên, HOẶC còn sống khi toàn bộ Bóng Tối chết.',
 };
-const HUNTER_POOL=['emi','franklin','george'], SHADOW_POOL=['unknown','vampire','werewolf'], NEUTRAL_POOL=['allie','bob','charles','daniel'];
-const ALLOC = {2:[1,1,0],3:[1,1,1],4:[2,2,0],5:[2,2,1],6:[2,2,2],7:[2,2,3],8:[3,3,2]};
+const HUNTER_POOL=['emi','franklin','george'],SHADOW_POOL=['vampire','werewolf','wight'],NEUTRAL_POOL=['allie','bob','charles','daniel'];
+const ALLOC={4:[2,2,0],5:[2,2,1],6:[2,2,2],7:[2,2,3],8:[3,3,2]};
 
-const AREAS = {
-  hermit:  {name:"Nhà Ẩn Sĩ",     nums:[2,3]},
-  gate:    {name:"Cổng Địa Ngục",  nums:[4,5]},
-  church:  {name:"Nhà Thờ",        nums:[6]},
-  cemetery:{name:"Nghĩa Trang",    nums:[8]},
-  woods:   {name:"Rừng Quái Dị",   nums:[9]},
-  altar:   {name:"Bàn Thờ Cổ",     nums:[10]},
+const AREAS={
+  hermit:{name:'Nhà Ẩn Sĩ',nums:[2,3],desc:'Rút 1 thẻ Ẩn Sĩ, đọc kín rồi đưa cho 1 người khác.'},
+  gate:{name:'Cổng Địa Ngục',nums:[4,5],desc:'Chọn 1 trong 3 bộ (Trắng, Đen, Ẩn Sĩ) để rút.'},
+  church:{name:'Nhà Thờ',nums:[6],desc:'Rút 1 thẻ Trắng.'},
+  cemetery:{name:'Nghĩa Trang',nums:[8],desc:'Rút 1 thẻ Đen.'},
+  woods:{name:'Rừng Quái Dị',nums:[9],desc:'Gây 2 sát thương cho 1 người, hoặc hồi 1 máu cho 1 người (kể cả bạn).'},
+  altar:{name:'Bàn Thờ Cổ',nums:[10],desc:'Cướp 1 trang bị (tự chọn) của 1 người.'},
 };
-const AREA_IDS = Object.keys(AREAS);
-function numToArea(n){ for(const id of AREA_IDS){ if(AREAS[id].nums.includes(n)) return id; } return null; }
+const AREA_IDS=Object.keys(AREAS);
+function numToArea(n){for(const id of AREA_IDS){if(AREAS[id].nums.includes(n))return id;}return null;}
 
-// Trang bị (hiệu ứng bị động, đọc từ arsenal)
-const EQUIP = {
-  butcher:{name:'Dao Bầu', atk:1}, chainsaw:{name:'Cưa Máy', atk:1}, broadaxe:{name:'Rìu Lớn', atk:1},
-  handgun:{name:'Súng Lục', range:'all'}, machinegun:{name:'Súng Máy', multi:true},
-  masamune:{name:'Kiếm Masamune', d4atk:true},
-  holyrobe:{name:'Áo Thánh', atk:-1, def:1}, talisman:{name:'Bùa Hộ Mệnh', talisman:true},
-  brooch:{name:'Trâm May Mắn', noWoods:true}, compass:{name:'La Bàn Thần Bí', reroll:true},
-  rosary:{name:'Chuỗi Bạc', lootAll:true}, spear:{name:'Giáo Longinus', spear:true},
+// Thẻ Trắng / Đen: type 'equip' (trang bị, để ngửa) hoặc 'single' (dùng 1 lần)
+const CARDS={
+  advent:{deck:'white',type:'single',name:'Giáng Thế',desc:'Nếu bạn là Thợ Săn, có thể lộ diện. Nếu lộ, hồi đầy máu.'},
+  blessing:{deck:'white',type:'single',name:'Ban Phước',desc:'Chọn 1 người khác và tung d6: người đó hồi số máu bằng số tung.'},
+  chocolate:{deck:'white',type:'single',name:'Sô-cô-la',desc:'Nếu bạn là Allie hoặc Emi, có thể lộ diện. Nếu lộ, hồi đầy máu.'},
+  concealed:{deck:'white',type:'single',name:'Tri Thức Giấu Kín',desc:'Sau lượt này bạn được chơi thêm 1 lượt.'},
+  mirror:{deck:'white',type:'single',name:'Gương Giải Trừ',desc:'Nếu bạn là Vampire, Werewolf hoặc Wight, bạn buộc phải lộ diện.'},
+  firstaid:{deck:'white',type:'single',name:'Sơ Cứu',desc:'Đặt sát thương của 1 người (kể cả bạn) về đúng 7.'},
+  flare:{deck:'white',type:'single',name:'Ánh Sáng Phán Xét',desc:'Tất cả người khác chịu 2 sát thương.'},
+  brooch:{deck:'white',type:'equip',name:'Trâm May Mắn',desc:'Bạn không mất máu vì Rừng Quái Dị.'},
+  guardian:{deck:'white',type:'single',name:'Thiên Thần Hộ Mệnh',desc:'Bạn không chịu sát thương từ đòn tấn công cho tới lượt kế tiếp của bạn.'},
+  holyrobe:{deck:'white',type:'equip',name:'Áo Thánh',desc:'Đòn tấn công của bạn gây ít hơn 1 sát thương; sát thương bạn nhận từ đòn tấn công giảm 1.'},
+  holywater:{deck:'white',type:'single',name:'Nước Thánh',desc:'Hồi 2 máu.'},
+  compass:{deck:'white',type:'equip',name:'La Bàn Thần Bí',desc:'Khi di chuyển, tung 2 lần và chọn 1 kết quả.'},
+  rosary:{deck:'white',type:'equip',name:'Chuỗi Bạc',desc:'Nếu đòn tấn công của bạn hạ gục ai, bạn lấy toàn bộ trang bị của người đó.'},
+  spear:{deck:'white',type:'equip',name:'Giáo Longinus',desc:'Nếu bạn là Thợ Săn và đòn đánh trúng, có thể lộ diện; đã lộ diện thì đòn đánh gây thêm 2 sát thương.'},
+  talisman:{deck:'white',type:'equip',name:'Bùa Hộ Mệnh',desc:'Bạn không chịu sát thương từ các thẻ Đen: Nhện Khát Máu, Dơi Hút Máu, Thuốc Nổ.'},
+  banana:{deck:'black',type:'single',name:'Vỏ Chuối',desc:'Đưa 1 trang bị của bạn cho người khác. Không có trang bị thì chịu 1 sát thương.'},
+  spider:{deck:'black',type:'single',name:'Nhện Khát Máu',desc:'Gây 2 sát thương cho 1 người bất kỳ và bạn tự chịu 2 sát thương.'},
+  butcher:{deck:'black',type:'equip',name:'Dao Bầu',desc:'Đòn đánh trúng gây thêm 1 sát thương.'},
+  chainsaw:{deck:'black',type:'equip',name:'Cưa Máy',desc:'Đòn đánh trúng gây thêm 1 sát thương.'},
+  ritual:{deck:'black',type:'single',name:'Nghi Lễ Ác Ma',desc:'Nếu bạn là Bóng Tối, có thể lộ diện. Nếu lộ, hồi đầy máu.'},
+  dynamite:{deck:'black',type:'single',name:'Thuốc Nổ',desc:'Tung 2 xúc xắc: mọi người ở khu có số đó (kể cả bạn) chịu 3 sát thương. Tung 7 thì không nổ.'},
+  handgun:{deck:'black',type:'equip',name:'Súng Lục',desc:'Tầm đánh của bạn là mọi khu, trừ khu đang đứng.'},
+  machinegun:{deck:'black',type:'equip',name:'Súng Máy',desc:'Đòn đánh nhắm mọi người trong tầm: tung 1 lần, áp cho tất cả.'},
+  masamune:{deck:'black',type:'equip',name:'Kiếm Masamune',desc:'Bạn BẮT BUỘC tấn công nếu có mục tiêu. Đòn đánh chỉ tung d4 và không bao giờ trượt.'},
+  goblin:{deck:'black',type:'single',name:'Yêu Tinh Nghịch',desc:'Cướp 1 trang bị (tự chọn) của 1 người.'},
+  broadaxe:{deck:'black',type:'equip',name:'Rìu Gỉ',desc:'Đòn đánh trúng gây thêm 1 sát thương.'},
+  doll:{deck:'black',type:'single',name:'Búp Bê Nguyền',desc:'Chọn 1 người và tung d6: 1–4 người đó chịu 3 sát thương, 5–6 bạn chịu 3.'},
+  bat:{deck:'black',type:'single',name:'Dơi Hút Máu',desc:'Gây 2 sát thương cho 1 người bất kỳ, bạn hồi 1 máu.'},
 };
-// Thẻ Trắng (16): mã + loại
-const WHITE_DECK=['advent','blessing','firstaid','flare','guardian','holywater','holywater','concealed','brooch','holyrobe','compass','rosary','spear','talisman','holywater','blessing'];
-// Thẻ Đen (16)
-const BLACK_DECK=['bananapeel','spider','ritual','dynamite','goblin','goblin','doll','bat','bat','bat','butcher','chainsaw','broadaxe','handgun','machinegun','masamune'];
-// Thẻ Ẩn Sĩ / Xanh (16): {cond, eff}
-const HERMIT_DECK=[
-  {t:'Cầu Viện', cond:'hunter', eff:'heal1else1'},
-  {t:'Phẫn Nộ', cond:'hs', eff:'giveOrDmg'},{t:'Phẫn Nộ', cond:'hs', eff:'giveOrDmg'},
-  {t:'Tống Tiền', cond:'hn', eff:'giveOrDmg'},{t:'Tống Tiền', cond:'hn', eff:'giveOrDmg'},
-  {t:'Bắt Nạt', cond:'hpLE11', eff:'dmg1'},
-  {t:'Trừ Tà', cond:'shadow', eff:'dmg2'},
-  {t:'Tham Lam', cond:'ns', eff:'giveOrDmg'},{t:'Tham Lam', cond:'ns', eff:'giveOrDmg'},
-  {t:'Xúm Lại', cond:'shadow', eff:'heal1else1'},
-  {t:'Chở Che', cond:'neutral', eff:'heal1else1'},
-  {t:'Tiên Tri', cond:'any', eff:'showToGiver'},
-  {t:'Tát', cond:'hunter', eff:'dmg1'},{t:'Tát', cond:'hunter', eff:'dmg1'},
-  {t:'Chú', cond:'shadow', eff:'dmg1'},
-  {t:'Bài Học Đau', cond:'hpGE12', eff:'dmg2'},
-];
-
-const BROKER='wss://broker.emqx.io:8084/mqtt', TOPIC='sanbongtoi/room/full1/state';
-let myId='p_'+Math.random().toString(36).slice(2,10);
-let myName='', state=null, client=null, connected=false, acting=false, selfHealTs=0;
-
-function pick(a){return a[Math.floor(Math.random()*a.length)];}
-function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
-function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n));}
-function clone(o){return JSON.parse(JSON.stringify(o));}
-function cur(){return state?clone(state):null;}
-function d6(){return 1+Math.floor(Math.random()*6);} function d4(){return 1+Math.floor(Math.random()*4);}
-
-// ============ MQTT ============
-function setStatus(){const el=document.getElementById('status');if(!el)return;el.innerHTML=connected?'<span class="dot dot-on"></span>Đã kết nối máy chủ':'<span class="dot dot-off"></span>Mất kết nối — đang thử lại...';}
-function setSyncError(v){const el=document.getElementById('syncBanner');if(el)el.style.display=v?'block':'none';setStatus();}
-function connectMQTT(){
-  if(typeof mqtt==='undefined'||window.__mqttFail){setSyncError(true);const el=document.getElementById('status');if(el)el.innerHTML='<span class="dot dot-off"></span>Không tải được thư viện mạng — host ở nơi khác.';return;}
-  client=mqtt.connect(BROKER,{clientId:'sbt_'+Math.random().toString(16).slice(2,10),clean:true,connectTimeout:8000,reconnectPeriod:3000,keepalive:30});
-  client.on('connect',()=>{connected=true;setSyncError(false);client.subscribe(TOPIC,{qos:0});});
-  client.on('message',(t,p)=>{let s;try{s=JSON.parse(p.toString());}catch(e){return;}if(!s||typeof s!=='object')return;state=s;if(myName){selfHeal();render();}});
-  client.on('reconnect',()=>{connected=false;setStatus();});
-  client.on('offline',()=>{connected=false;setSyncError(true);});
-  client.on('error',(e)=>{connected=false;setSyncError(true);});
-  client.on('close',()=>{connected=false;setStatus();});
-}
-function publishState(s){state=s;if(client&&connected){client.publish(TOPIC,JSON.stringify(s),{qos:0,retain:true});setSyncError(false);}else setSyncError(true);}
-function waitConnected(ms){return new Promise(res=>{if(connected)return res(true);const t0=Date.now();const iv=setInterval(()=>{if(connected||Date.now()-t0>ms){clearInterval(iv);res(connected);}},150);});}
-
-function freshLobby(){return {phase:'lobby',players:{},order:[],waiting:[],log:['Sảnh chờ mở. Cần tối thiểu 2 người.']};}
-function pushLog(s,m){s.log.push(m);if(s.log.length>50)s.log=s.log.slice(-50);}
-
-function selfHeal(){
-  if(!myName||!state)return;
-  if(state.phase==='playing'&&state.players[turnId(state)]&&!state.players[turnId(state)].alive){
-    if(Date.now()-selfHealTs>1500){selfHealTs=Date.now();const s=cur();if(s.players[turnId(s)]&&!s.players[turnId(s)].alive){advanceTurn(s);checkWin(s);publishState(s);}}
-    return;
-  }
-  if(state.phase!=='lobby')return;
-  if(state.players[myId]||(state.waiting||[]).some(w=>w.id===myId))return;
-  if(Date.now()-selfHealTs<1200)return; selfHealTs=Date.now();
-  const s=cur(); if(Object.keys(s.players).length>=8)s.waiting.push({id:myId,name:myName}); else s.players[myId]={name:myName}; publishState(s);
-}
-
-// ============ SẢNH ============
-async function joinLobby(){
-  const inp=document.getElementById('nameInput'); myName=(inp?inp.value:'').trim(); if(!myName)return;
-  const btn=document.getElementById('joinBtn'); if(btn){btn.disabled=true;btn.textContent='Đang vào...';}
-  const ok=await waitConnected(7000);
-  if(!ok){setSyncError(true);if(btn){btn.disabled=false;btn.textContent='Thử lại';}myName='';return;}
-  let s=cur()||freshLobby();
-  if(s.phase==='lobby'){if(Object.keys(s.players).length>=8)s.waiting.push({id:myId,name:myName});else if(!s.players[myId])s.players[myId]={name:myName};}
-  else{if(!s.waiting.find(w=>w.id===myId))s.waiting.push({id:myId,name:myName});}
-  publishState(s); render();
-}
-function leaveLobby(){
-  let s=cur(); if(s){if(s.phase==='lobby'&&s.players[myId])delete s.players[myId];s.waiting=(s.waiting||[]).filter(w=>w.id!==myId);publishState(s);}
-  myName=''; const inp=document.getElementById('nameInput');if(inp)inp.value=''; const btn=document.getElementById('joinBtn');if(btn){btn.disabled=false;btn.textContent='Tham Gia';} render();
-}
-function resetRoom(){ if(!connected){setSyncError(true);return;} if(!confirm('Đặt lại phòng về sảnh trống?'))return; publishState(freshLobby()); }
-
-// ============ BẮT ĐẦU VÁN ============
-function startGame(){
-  if(acting)return; acting=true;
-  let s=cur(); const ids=Object.keys(s.players);
-  if(ids.length<2){acting=false;return;}
-  const n=clamp(ids.length,2,8); const [nh,ns,nn]=ALLOC[n];
-  const hRoles=shuffle(HUNTER_POOL).slice(0,nh), sRoles=shuffle(SHADOW_POOL).slice(0,ns), nRoles=shuffle(NEUTRAL_POOL).slice(0,nn);
-  const chars=shuffle([...hRoles,...sRoles,...nRoles]);
-  const order=shuffle(ids);
-  order.forEach((id,i)=>{
-    const ch=chars[i]; const c=CHARACTERS[ch];
-    s.players[id]={name:s.players[id].name, char:ch, faction:c.faction, maxHp:c.hp, hp:c.hp, alive:true, area:null, revealed:false, arsenal:[], usedPower:false, kills:0, isBot:!!s.players[id].isBot};
-  });
-  // ghép 3 vùng (mỗi vùng 2 khu) ngẫu nhiên -> tầm đánh
-  const shuffled=shuffle(AREA_IDS); s.zones=[[shuffled[0],shuffled[1]],[shuffled[2],shuffled[3]],[shuffled[4],shuffled[5]]];
-  s.order=order; s.turnIdx=0; s.round=1; s.phase='playing'; s.log=[]; s.deathOrder=[];
-  s.step='move'; s.didAction=false; s.didAttack=false; s.pending=null; s.lastRoll=null; s.visionReveal=null; s.extraTurn=false; s.guarded={};
-  pushLog(s,`Ván bắt đầu với ${order.length} người! Lượt của ${s.players[order[0]].name}.`);
-  publishState(s); acting=false; render();
-}
-
-function turnId(s){return s.order[s.turnIdx];}
-function zoneOf(s,areaId){ if(!s.zones)return[areaId]; for(const z of s.zones){if(z.includes(areaId))return z;} return [areaId]; }
-function attackRange(s,id){ const p=s.players[id]; if(p.arsenal.includes('handgun')) return AREA_IDS.filter(a=>a!==p.area); return zoneOf(s,p.area); }
-function playersInAreas(s,areaIds,excludeId){ return s.order.filter(id=>s.players[id].alive&&areaIds.includes(s.players[id].area)&&id!==excludeId); }
-function atkBonus(s,id){ let b=0; s.players[id].arsenal.forEach(e=>{ if(EQUIP[e]&&EQUIP[e].atk) b+=EQUIP[e].atk; }); return b; }
-function defBonus(s,id){ let b=0; s.players[id].arsenal.forEach(e=>{ if(EQUIP[e]&&EQUIP[e].def) b+=EQUIP[e].def; }); return b; }
-function hasEquip(s,id,tag){ return s.players[id].arsenal.some(e=>EQUIP[e]&&EQUIP[e][tag]); }
-function isMyTurn(s){ return turnId(s)===myId && s.players[myId] && s.players[myId].alive; }
-
-// ---- sát thương / hồi / chết ----
-function damage(s, id, amt, srcId){
-  const p=s.players[id]; if(!p.alive||amt<=0) return 0;
-  amt=Math.max(0, amt - defBonus(s,id));
-  if(amt<=0) return 0;
-  p.hp=clamp(p.hp-amt,0,p.maxHp);
-  checkDeath(s,id,srcId);
-  return amt;
-}
-function heal(s,id,amt){ const p=s.players[id]; if(!p.alive)return; p.hp=clamp(p.hp+amt,0,p.maxHp); }
-function checkDeath(s,id,killerId){
-  const p=s.players[id];
-  if(p.hp<=0&&p.alive){
-    p.alive=false; p.revealed=true; (s.deathOrder=s.deathOrder||[]).push(id);
-    if(killerId&&killerId!==id&&s.players[killerId]){
-      s.players[killerId].kills=(s.players[killerId].kills||0)+1;
-      // cướp trang bị khi hạ gục
-      const loot=p.arsenal||[];
-      if(loot.length){
-        if(hasEquip(s,killerId,'lootAll')){ s.players[killerId].arsenal.push(...loot); pushLog(s,`🎒 ${s.players[killerId].name} cướp TOÀN BỘ trang bị của ${p.name}.`); }
-        else { const g=loot[0]; s.players[killerId].arsenal.push(g); pushLog(s,`🎒 ${s.players[killerId].name} cướp "${EQUIP[g].name}" từ ${p.name}.`); }
-        p.arsenal=[];
-      }
-    }
-    // Daniel tự lộ khi có người chết
-    s.order.forEach(x=>{ if(s.players[x].alive&&s.players[x].char==='daniel'&&!s.players[x].revealed){ s.players[x].revealed=true; pushLog(s,`👁️ Danh tính ${s.players[x].name} tự lộ (Daniel): Trung Lập · Daniel.`);} });
-    pushLog(s,`💀 ${p.name} gục ngã! (${roleTitle(p)})`);
-  }
-}
-
-// ============ DI CHUYỂN ============
-function rollMove(){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||s.phase!=='playing'||!isMyTurn(s)||s.step!=='move'||s.pending){acting=false;render();return;}
-  let a=d6(), b=d4(), sum=a+b;
-  s.lastRoll={by:myId,name:s.players[myId].name,d6:a,d4:b,sum,kind:'move'};
-  if(sum===7){ s.pending={kind:'chooseArea',reason:'Tung 7 — chọn khu bất kỳ'}; pushLog(s,`🎲 ${s.players[myId].name} tung 7 → chọn khu.`); publishState(s);acting=false;render();return; }
-  let area=numToArea(sum);
-  if(area===s.players[myId].area){ // trùng khu -> tung lại tự động
-    do{ a=d6();b=d4();sum=a+b; area=(sum===7)?null:numToArea(sum);}while(area===s.players[myId].area);
-    s.lastRoll={by:myId,name:s.players[myId].name,d6:a,d4:b,sum,kind:'move'};
-    if(sum===7){ s.pending={kind:'chooseArea',reason:'Tung 7 — chọn khu bất kỳ'}; publishState(s);acting=false;render();return; }
-  }
-  moveToArea(s, area, `🎲 ${s.players[myId].name} tung ${a}+${b}=${sum}`);
-  publishState(s); acting=false; render();
-}
-function emiMove(areaId){ // Emi chọn thẳng khu
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||s.step!=='move'||s.players[myId].char!=='emi'||!s.players[myId].revealed){acting=false;render();return;}
-  if(areaId===s.players[myId].area){acting=false;render();return;}
-  moveToArea(s,areaId,`✨ ${s.players[myId].name} dùng năng lực Emi di chuyển`);
-  publishState(s);acting=false;render();
-}
-function chooseArea(areaId){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||!s.pending||s.pending.kind!=='chooseArea'){acting=false;render();return;}
-  if(areaId===s.players[myId].area){acting=false;render();return;}
-  s.pending=null; moveToArea(s,areaId,`➡️ ${s.players[myId].name} chọn`);
-  publishState(s);acting=false;render();
-}
-function moveToArea(s, area, prefix){
-  s.players[myId].area=area; s.step='action'; s.didAction=false; s.didAttack=false;
-  pushLog(s, `${prefix} → tới ${AREAS[area].name}.`);
-}
-
-// ============ HÀNH ĐỘNG THEO KHU ============
-function doArea(){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||s.step!=='action'||s.didAction||s.pending){acting=false;render();return;}
-  const area=s.players[myId].area;
-  if(area==='church'){ s.didAction=true; drawWhite(s); }
-  else if(area==='cemetery'){ s.didAction=true; drawBlack(s); }
-  else if(area==='hermit'){ s.didAction=true; drawHermit(s); }
-  else if(area==='gate'){ s.pending={kind:'gateDeck'}; }
-  else if(area==='woods'){ s.pending={kind:'woods'}; }
-  else if(area==='altar'){ s.pending={kind:'altarTarget'}; }
-  publishState(s); acting=false; render();
-}
-function gatePick(deck){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||!s.pending||s.pending.kind!=='gateDeck'){acting=false;render();return;}
-  s.pending=null; s.didAction=true;
-  if(deck==='white')drawWhite(s); else if(deck==='black')drawBlack(s); else drawHermit(s);
-  publishState(s);acting=false;render();
-}
-
-// ---- rút thẻ Trắng ----
-function drawWhite(s){
-  const id=pick(WHITE_DECK); const me=s.players[myId];
-  if(EQUIP[id]){ me.arsenal.push(id); pushLog(s,`⬜ ${me.name} rút thẻ Trắng: nhận trang bị "${EQUIP[id].name}".`); afterAction(s); return; }
-  switch(id){
-    case 'advent': if(me.faction==='hunter'){me.revealed=true;me.hp=me.maxHp;pushLog(s,`⬜ ${me.name} rút "Giáng Thế": là Thợ Săn → lộ diện & hồi đầy máu.`);}else pushLog(s,`⬜ ${me.name} rút "Giáng Thế": không phải Thợ Săn, vô hiệu.`); afterAction(s); break;
-    case 'blessing': s.pending={kind:'cardTarget',card:'blessing',need:'other'}; pushLog(s,`⬜ ${me.name} rút "Ban Phước": chọn 1 người (khác) để hồi máu.`); break;
-    case 'firstaid': s.pending={kind:'cardTarget',card:'firstaid',need:'any'}; pushLog(s,`⬜ ${me.name} rút "Sơ Cứu": chọn 1 người để đặt sát thương về 7.`); break;
-    case 'flare': { pushLog(s,`⬜ ${me.name} rút "Ánh Sáng Phán Xét": mọi người khác -2 máu.`); s.order.forEach(x=>{if(x!==myId)damage(s,x,2,myId);}); afterAction(s); break; }
-    case 'guardian': s.guarded=s.guarded||{}; s.guarded[myId]=true; pushLog(s,`⬜ ${me.name} rút "Thiên Thần Hộ Mệnh": miễn sát thương từ tấn công tới lượt sau.`); afterAction(s); break;
-    case 'holywater': heal(s,myId,2); pushLog(s,`⬜ ${me.name} rút "Nước Thánh": hồi 2 máu.`); afterAction(s); break;
-    case 'concealed': s.extraTurn=true; pushLog(s,`⬜ ${me.name} rút "Tri Thức Giấu Kín": sẽ được thêm 1 lượt.`); afterAction(s); break;
-    default: afterAction(s);
-  }
-}
-// ---- rút thẻ Đen ----
-function drawBlack(s){
-  const id=pick(BLACK_DECK); const me=s.players[myId];
-  if(EQUIP[id]){ me.arsenal.push(id); pushLog(s,`⬛ ${me.name} rút thẻ Đen: nhận trang bị "${EQUIP[id].name}".`); afterAction(s); return; }
-  switch(id){
-    case 'bananapeel': if(me.arsenal.length){ const g=me.arsenal.shift(); s.pending={kind:'cardTarget',card:'banana',need:'other',give:g}; pushLog(s,`⬛ ${me.name} rút "Vỏ Chuối": đưa 1 trang bị cho người khác.`);} else { damage(s,myId,1,null); pushLog(s,`⬛ ${me.name} rút "Vỏ Chuối": không có trang bị → -1 máu.`); afterAction(s);} break;
-    case 'spider': s.pending={kind:'cardTarget',card:'spider',need:'any'}; pushLog(s,`⬛ ${me.name} rút "Nhện Khát Máu": chọn người gây 2 sát thương (bạn tự chịu 2).`); break;
-    case 'ritual': if(me.faction==='shadow'){me.revealed=true;me.hp=me.maxHp;pushLog(s,`⬛ ${me.name} rút "Nghi Lễ Ác Ma": là Bóng Tối → lộ diện & hồi đầy máu.`);}else pushLog(s,`⬛ ${me.name} rút "Nghi Lễ Ác Ma": không phải Bóng Tối, vô hiệu.`); afterAction(s); break;
-    case 'dynamite': { const a=d6(),b=d4(),sum=a+b; pushLog(s,`⬛ ${me.name} rút "Thuốc Nổ": tung ${a}+${b}=${sum}.`); if(sum!==7){ const ar=numToArea(sum); const victims=s.order.filter(x=>s.players[x].alive&&s.players[x].area===ar); victims.forEach(x=>{ if(!(hasEquip(s,x,'talisman'))) damage(s,x,3,myId); }); pushLog(s,`💥 Nổ ở ${AREAS[ar].name}: ${victims.length?victims.map(x=>s.players[x].name).join(', '):'không có ai'}.`);} else pushLog(s,`💨 Tung 7 — không nổ.`); afterAction(s); break; }
-    case 'goblin': s.pending={kind:'altarTarget',card:'goblin'}; pushLog(s,`⬛ ${me.name} rút "Yêu Tinh Nghịch": cướp 1 trang bị của người khác.`); break;
-    case 'doll': s.pending={kind:'cardTarget',card:'doll',need:'any'}; pushLog(s,`⬛ ${me.name} rút "Búp Bê Nguyền": chọn mục tiêu, tung d6 (1-4: mục tiêu -3; 5-6: bạn -3).`); break;
-    case 'bat': s.pending={kind:'cardTarget',card:'bat',need:'any'}; pushLog(s,`⬛ ${me.name} rút "Dơi Hút Máu": chọn người gây 2 sát thương, bạn hồi 1.`); break;
-    default: afterAction(s);
-  }
-}
-// ---- thẻ cần chọn mục tiêu ----
-function cardTarget(targetId){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||!s.pending||s.pending.kind!=='cardTarget'){acting=false;render();return;}
-  const card=s.pending.card, me=s.players[myId], t=s.players[targetId];
-  if(!t||!t.alive){acting=false;render();return;}
-  if(card==='blessing'){ if(targetId===myId){acting=false;render();return;} const h=d6(); heal(s,targetId,h); pushLog(s,`⬜ ${me.name} ban phước ${t.name}: hồi ${h} máu.`);}
-  else if(card==='firstaid'){ t.hp=clamp(t.maxHp-7,0,t.maxHp); pushLog(s,`⬜ ${me.name} dùng Sơ Cứu lên ${t.name}: đặt sát thương về 7.`); checkDeath(s,targetId,myId);}
-  else if(card==='banana'){ if(targetId===myId){acting=false;render();return;} t.arsenal.push(s.pending.give); pushLog(s,`⬛ ${me.name} đưa "${EQUIP[s.pending.give].name}" cho ${t.name}.`);}
-  else if(card==='spider'){ if(!hasEquip(s,targetId,'talisman'))damage(s,targetId,2,myId); damage(s,myId,2,null); pushLog(s,`⬛ ${me.name} dùng Nhện Khát Máu lên ${t.name} (-2), tự chịu -2.`);}
-  else if(card==='doll'){ const r=d6(); if(r<=4){damage(s,targetId,3,myId);pushLog(s,`⬛ Búp Bê Nguyền (${r}): ${t.name} -3 máu.`);}else{damage(s,myId,3,null);pushLog(s,`⬛ Búp Bê Nguyền (${r}): ${me.name} tự -3 máu.`);}}
-  else if(card==='bat'){ if(!hasEquip(s,targetId,'talisman'))damage(s,targetId,2,myId); heal(s,myId,1); pushLog(s,`⬛ ${me.name} dùng Dơi Hút Máu lên ${t.name} (-2), hồi 1.`);}
-  s.pending=null; checkWin(s); afterAction(s); publishState(s); acting=false; render();
-}
-// ---- Rừng Quái Dị ----
-function woodsDo(targetId, mode){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||!s.pending||s.pending.kind!=='woods'){acting=false;render();return;}
-  const me=s.players[myId], t=s.players[targetId]; if(!t||!t.alive){acting=false;render();return;}
-  if(mode==='dmg'){ if(hasEquip(s,targetId,'noWoods')){pushLog(s,`🌲 ${me.name} định hại ${t.name} ở Rừng nhưng bị Trâm May Mắn chặn.`);} else {damage(s,targetId,2,myId);pushLog(s,`🌲 ${me.name} gây 2 sát thương ${t.name} tại Rừng Quái Dị.`);} }
-  else { heal(s,targetId,1); pushLog(s,`🌲 ${me.name} hồi 1 máu cho ${t.name} tại Rừng Quái Dị.`); }
-  s.pending=null; s.didAction=true; checkWin(s); afterAction(s); publishState(s); acting=false; render();
-}
-// ---- Bàn Thờ Cổ / Yêu Tinh: cướp trang bị ----
-function altarSteal(targetId){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||!s.pending||(s.pending.kind!=='altarTarget')){acting=false;render();return;}
-  const me=s.players[myId], t=s.players[targetId];
-  if(!t||!t.alive||!t.arsenal.length){ s.pending=null; s.didAction=true; pushLog(s,`🏛️ ${me.name}: không cướp được (mục tiêu không có trang bị).`); afterAction(s); publishState(s);acting=false;render();return; }
-  const g=t.arsenal.shift(); me.arsenal.push(g);
-  pushLog(s,`🏛️ ${me.name} cướp "${EQUIP[g].name}" từ ${t.name}.`);
-  s.pending=null; s.didAction=true; afterAction(s); publishState(s); acting=false; render();
-}
-function skipArea(){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||s.step!=='action'){acting=false;render();return;}
-  s.didAction=true; s.pending=null; publishState(s); acting=false; render();
-}
-function afterAction(s){ /* giữ ở bước action để có thể tấn công/kết thúc */ }
-
-// ============ THẺ ẨN SĨ ============
-function drawHermit(s){ const card=pick(HERMIT_DECK); s.pending={kind:'hermitTarget',card}; pushLog(s,`🟢 ${s.players[myId].name} rút thẻ Ẩn Sĩ — chọn 1 người để đưa.`); }
-function hermitGive(targetId){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||!s.pending||s.pending.kind!=='hermitTarget'){acting=false;render();return;}
-  const me=s.players[myId], t=s.players[targetId]; if(!t||!t.alive||targetId===myId){acting=false;render();return;}
-  const card=s.pending.card; const match=hermitMatch(card.cond,t);
-  let result='';
-  // Unknown có thể phớt lờ
-  const ignore = (t.char==='unknown');
-  if(card.eff==='showToGiver'){ result='đã cho xem danh tính (riêng người đưa)'; s.visionReveal={by:myId,target:targetId,card:card.t,desc:'Tiên Tri: người nhận cho người đưa xem danh tính.',secret:`${t.name} là ${roleTitle(t)}`,result:'người đưa đã biết danh tính',ts:Date.now()}; }
-  else if(!match || ignore){ result= ignore&&match?'phớt lờ (Unknown)':'không hề hấn gì'; s.visionReveal={by:myId,target:targetId,card:card.t,desc:hermitDesc(card),result,ts:Date.now()}; }
-  else {
-    if(card.eff==='dmg1'){damage(s,targetId,1,myId);result=`${t.name} -1 máu`;}
-    else if(card.eff==='dmg2'){damage(s,targetId,2,myId);result=`${t.name} -2 máu`;}
-    else if(card.eff==='heal1else1'){heal(s,targetId,1);result=`${t.name} hồi 1 máu`;}
-    else if(card.eff==='giveOrDmg'){ if(t.arsenal.length){const g=t.arsenal.shift();me.arsenal.push(g);result=`${t.name} đưa "${EQUIP[g].name}" cho ${me.name}`;} else {damage(s,targetId,1,myId);result=`${t.name} không có trang bị → -1 máu`;} }
-    s.visionReveal={by:myId,target:targetId,card:card.t,desc:hermitDesc(card),result,ts:Date.now()};
-  }
-  pushLog(s,`🟢 ${me.name} đưa 1 thẻ Ẩn Sĩ cho ${t.name} → ${result}.`);
-  s.pending=null; s.didAction=true; checkWin(s); afterAction(s); publishState(s); acting=false; render();
-}
+const WHITE_DECK=['advent','blessing','chocolate','concealed','mirror','firstaid','flare','brooch','guardian','holyrobe','holywater','holywater','compass','rosary','spear','talisman'];
+const BLACK_DECK=['banana','spider','butcher','chainsaw','ritual','dynamite','handgun','machinegun','masamune','goblin','goblin','broadaxe','doll','bat','bat','bat'];
+// Thẻ Ẩn Sĩ (16)
+const HERMIT={
+  aid:{name:'Cầu Viện',cond:'hunter',eff:'healOrDmg'},
+  anger:{name:'Phẫn Nộ',cond:'hs',eff:'giveOrDmg'},
+  blackmail:{name:'Tống Tiền',cond:'hn',eff:'giveOrDmg'},
+  bully:{name:'Bắt Nạt',cond:'hpLE11',eff:'dmg1'},
+  exorcism:{name:'Trừ Tà',cond:'shadow',eff:'dmg2'},
+  greed:{name:'Tham Lam',cond:'ns',eff:'giveOrDmg'},
+  huddle:{name:'Xúm Lại',cond:'shadow',eff:'healOrDmg'},
+  nurture:{name:'Chở Che',cond:'neutral',eff:'healOrDmg'},
+  prediction:{name:'Tiên Tri',cond:'any',eff:'show'},
+  slap:{name:'Tát',cond:'hunter',eff:'dmg1'},
+  spell:{name:'Chú',cond:'shadow',eff:'dmg1'},
+  lesson:{name:'Bài Học Đau',cond:'hpGE12',eff:'dmg2'},
+};
+const HERMIT_DECK=['aid','anger','anger','blackmail','blackmail','bully','exorcism','greed','greed','huddle','nurture','prediction','slap','slap','spell','lesson'];
+const HCOND={hunter:'Thợ Săn',shadow:'Bóng Tối',neutral:'Trung Lập',hs:'Thợ Săn hoặc Bóng Tối',hn:'Thợ Săn hoặc Trung Lập',ns:'Trung Lập hoặc Bóng Tối',hpLE11:'nhân vật có máu tối đa từ 11 trở xuống',hpGE12:'nhân vật có máu tối đa từ 12 trở lên'};
+const HEFF={dmg1:'chịu 1 sát thương',dmg2:'chịu 2 sát thương',healOrDmg:'hồi 1 máu (đang đầy máu thì chịu 1 sát thương)',giveOrDmg:'đưa 1 trang bị cho người đưa thẻ, hoặc chịu 1 sát thương'};
+function hermitText(cid){const H=HERMIT[cid];if(H.eff==='show')return 'Bạn phải cho người đưa thẻ (và chỉ người đó) xem danh tính của mình.';return `Tôi cá bạn là ${HCOND[H.cond]}! Nếu đúng: ${HEFF[H.eff]}.`;}
 function hermitMatch(cond,p){
   if(cond==='any')return true;
-  if(cond==='hunter')return p.faction==='hunter';
-  if(cond==='shadow')return p.faction==='shadow';
-  if(cond==='neutral')return p.faction==='neutral';
-  if(cond==='hs')return p.faction==='hunter'||p.faction==='shadow';
-  if(cond==='hn')return p.faction==='hunter'||p.faction==='neutral';
-  if(cond==='ns')return p.faction==='neutral'||p.faction==='shadow';
+  if(cond==='hunter'||cond==='shadow'||cond==='neutral')return p.faction===cond;
+  if(cond==='hs')return p.faction!=='neutral';
+  if(cond==='hn')return p.faction!=='shadow';
+  if(cond==='ns')return p.faction!=='hunter';
   if(cond==='hpLE11')return p.maxHp<=11;
   if(cond==='hpGE12')return p.maxHp>=12;
   return false;
 }
-function hermitDesc(card){
-  const m={hunter:'Thợ Săn',shadow:'Bóng Tối',neutral:'Trung Lập',hs:'Thợ Săn/Bóng Tối',hn:'Thợ Săn/Trung Lập',ns:'Trung Lập/Bóng Tối',hpLE11:'máu tối đa ≤ 11',hpGE12:'máu tối đa ≥ 12',any:'bất kỳ'};
-  const e={dmg1:'-1 máu',dmg2:'-2 máu',heal1else1:'hồi 1 máu',giveOrDmg:'đưa 1 trang bị cho người đưa, nếu không có thì -1 máu',showToGiver:'cho người đưa xem danh tính'};
-  return `Nếu là ${m[card.cond]||card.cond}: ${e[card.eff]||''}.`;
-}
+const FACTION_LABEL={hunter:'Thợ Săn',shadow:'Bóng Tối',neutral:'Trung Lập'};
+function factionLabel(f){return FACTION_LABEL[f]||f;}
+function roleTitle(p){const c=CHARACTERS[p.char];return `${c?c.name:'?'} (${factionLabel(p.faction)})`;}
+function eqName(id){return CARDS[id]?CARDS[id].name:id;}
 
-// ============ TẤN CÔNG ============
-function attack(targetId){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||s.step!=='action'||s.didAttack||s.pending){acting=false;render();return;}
-  const me=s.players[myId], t=s.players[targetId];
-  const range=attackRange(s,myId);
-  if(!t||!t.alive||!range.includes(t.area)){acting=false;render();return;}
-  let a=d6(), b=d4(), diff=Math.abs(a-b);
-  if(hasEquip(s,myId,'d4atk')){ b=d4(); diff=b; a='-'; } // Masamune: chỉ d4, không trượt
-  let dmg=diff>0?diff+atkBonus(s,myId):0;
-  s.didAttack=true;
-  s.lastRoll={by:myId,name:me.name,d6:a,d4:b,sum:diff,kind:'attack',target:t.name};
-  if(dmg<=0){ pushLog(s,`⚔️ ${me.name} tấn công ${t.name} nhưng TRƯỢT (${a} vs ${b}).`); checkWin(s); afterAction(s); publishState(s); acting=false; render(); return; }
-  // Bob: có thể cướp trang bị thay vì sát thương (nếu dmg>=2 & mục tiêu có đồ)
-  if(me.char==='bob'&&me.revealed&&dmg>=2&&t.arsenal.length){
-    s.pending={kind:'bobChoice',target:targetId,dmg}; pushLog(s,`⚔️ ${me.name} (Bob) đánh trúng ${t.name} ${dmg} — chọn cướp trang bị hay gây sát thương.`);
-    publishState(s); acting=false; render(); return;
+// ================= TIỆN ÍCH / KẾT NỐI =================
+const BROKER='wss://broker.emqx.io:8084/mqtt';
+const LS=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);return v;}catch(e){return null;}};
+const IS_BROWSER=(typeof document!=='undefined'&&!!document.getElementById);
+let myId=LS('sbt_id');if(!myId){myId='p_'+Math.random().toString(36).slice(2,10);LS('sbt_id',myId);}
+let myName='',room='',topic='',state=null,client=null,connected=false,joined=false,busy=false;
+function $(id){return IS_BROWSER?document.getElementById(id):null;}
+function pick(a){return a[Math.floor(Math.random()*a.length)];}
+function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function clone(o){return JSON.parse(JSON.stringify(o));}
+function cur(){return state?clone(state):null;}
+function d6(){return 1+Math.floor(Math.random()*6);}
+function d4(){return 1+Math.floor(Math.random()*4);}
+function esc(str){return String(str==null?'':str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function setStatus(){const el=$('status');if(!el)return;el.innerHTML=connected?`<span class="dot dot-on"></span>Đã kết nối${room?' · phòng <b>'+esc(room)+'</b>':''}`:'<span class="dot dot-off"></span>Mất kết nối — đang thử lại…';}
+function setSyncError(v){const el=$('syncBanner');if(el)el.style.display=v?'block':'none';setStatus();}
+function connectMQTT(){
+  if(typeof mqtt==='undefined'||(typeof window!=='undefined'&&window.__mqttFail)){setSyncError(true);const el=$('status');if(el)el.innerHTML='<span class="dot dot-off"></span>Không tải được thư viện mạng — host file ở nơi khác.';return;}
+  client=mqtt.connect(BROKER,{clientId:'sbt_'+Math.random().toString(16).slice(2,10),clean:true,connectTimeout:8000,reconnectPeriod:3000,keepalive:30});
+  client.on('connect',()=>{connected=true;setSyncError(false);if(topic)client.subscribe(topic,{qos:0});});
+  client.on('message',(t,p)=>{if(t!==topic)return;let s;try{s=JSON.parse(p.toString());}catch(e){return;}if(!s||typeof s!=='object'||!s.phase)return;state=s;onState();});
+  client.on('reconnect',()=>{connected=false;setStatus();});
+  client.on('offline',()=>{connected=false;setSyncError(true);});
+  client.on('error',()=>{connected=false;setSyncError(true);});
+  client.on('close',()=>{connected=false;setStatus();});
+}
+function setRoom(code){
+  code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);if(code.length<3)return false;
+  if(topic&&client&&connected&&topic!=='sanbongtoi/v2/'+code+'/state')client.unsubscribe(topic);
+  room=code;topic='sanbongtoi/v2/'+code+'/state';state=null;LS('sbt_room',code);
+  if(client&&connected)client.subscribe(topic,{qos:0});
+  try{history.replaceState(null,'','#'+code);}catch(e){}
+  return true;
+}
+function publishState(s){state=s;if(client&&connected&&topic){client.publish(topic,JSON.stringify(s),{qos:0,retain:true});setSyncError(false);}else if(IS_BROWSER)setSyncError(true);}
+function waitConnected(ms){return new Promise(res=>{if(connected)return res(true);const t0=Date.now();const iv=setInterval(()=>{if(connected||Date.now()-t0>ms){clearInterval(iv);res(connected);}},150);});}
+function waitState(ms){return new Promise(res=>{const t0=Date.now();const iv=setInterval(()=>{if(state||Date.now()-t0>ms){clearInterval(iv);res(!!state);}},100);});}
+
+function addLog(s,t){s.seq=(s.seq||0)+1;s.log.push({n:s.seq,t});if(s.log.length>80)s.log=s.log.slice(-80);}
+function freshLobby(){const s={v:2,phase:'lobby',seq:0,host:null,players:{},order:[],waiting:[],log:[]};addLog(s,'Sảnh chờ mở. Cần 4–8 người (bot tính là người).');return s;}
+function commit(s){normalize(s);s.seq=(s.seq||0)+1;publishState(s);render();}
+function act(fn){if(busy)return;const s=cur();if(!s)return;busy=true;let ok=false;try{ok=fn(s);}catch(e){console.error(e);}busy=false;if(ok)commit(s);else render();}
+function onState(){if(!joined){render();return;}fixups();render();}
+
+// ================= SẢNH =================
+function addMe(s){
+  if(s.phase==='lobby'){
+    if(s.players[myId]){s.players[myId].name=myName;}
+    else if(Object.keys(s.players).length>=8){if(!s.waiting.some(w=>w.id===myId))s.waiting.push({id:myId,name:myName});}
+    else{s.players[myId]={name:myName,isBot:false};s.waiting=s.waiting.filter(w=>w.id!==myId);addLog(s,`${myName} vào sảnh.`);}
+  }else{
+    if(!s.players[myId]&&!s.waiting.some(w=>w.id===myId))s.waiting.push({id:myId,name:myName});
   }
-  applyAttack(s,myId,targetId,dmg,a,b);
-  checkWin(s); afterAction(s); publishState(s); acting=false; render();
+  if(!s.host||!s.players[s.host]||s.players[s.host].isBot)s.host=firstHuman(s)||myId;
 }
-function applyAttack(s,attId,targetId,dmg,a,b){
-  const att=s.players[attId], t=s.players[targetId];
-  if(s.guarded&&s.guarded[targetId]){ pushLog(s,`🛡️ ${t.name} được Thiên Thần Hộ Mệnh che chở — miễn sát thương.`); return; }
-  // Giáo Longinus: Thợ Săn đã lộ diện, đánh trúng +2 sát thương
-  if(hasEquip(s,attId,'spear')&&att.faction==='hunter'&&att.revealed&&dmg>0){ dmg+=2; }
-  const dealt=damage(s,targetId,dmg,attId);
-  pushLog(s,`⚔️ ${att.name} tấn công ${t.name}: ${dealt} sát thương.`);
-  if(dealt>0 && att.char==='vampire' && att.revealed){ heal(s,attId,2); pushLog(s,`🩸 ${att.name} (Vampire) hồi 2 máu.`); }
-  // Werewolf phản đòn
-  if(t.alive&&t.char==='werewolf'&&t.revealed&&dealt>0){
-    let ra=d6(),rb=d4(),rd=Math.abs(ra-rb); let rdmg=rd>0?rd+atkBonus(s,targetId):0;
-    if(rdmg>0){ const rback=damage(s,attId,rdmg,targetId); pushLog(s,`🐺 ${t.name} (Werewolf) phản đòn ${att.name}: ${rback} sát thương.`); }
+function firstHuman(s){const ids=s.order&&s.order.length?s.order:Object.keys(s.players);return ids.find(id=>s.players[id]&&!s.players[id].isBot)||null;}
+function controllerId(s){if(s.host&&s.players[s.host]&&!s.players[s.host].isBot)return s.host;return firstHuman(s);}
+function isHost(s){return s&&s.host===myId;}
+async function joinRoom(){
+  const ni=$('nameInput'),ri=$('roomInput');const name=(ni?ni.value:'').trim();const code=(ri?ri.value:'').trim();
+  if(!name){if(ni)ni.focus();return;}
+  if(!setRoom(code)){if(ri){ri.focus();ri.placeholder='Mã phòng cần 3–8 chữ/số';}return;}
+  myName=name;LS('sbt_name',name);joined=true;
+  const btn=$('joinBtn');if(btn){btn.disabled=true;btn.textContent='Đang vào…';}
+  render();
+  const ok=await waitConnected(7000);
+  if(!ok){setSyncError(true);joined=false;if(btn){btn.disabled=false;btn.textContent='Thử lại';}render();return;}
+  await waitState(4000);
+  const s=cur()||freshLobby();addMe(s);commit(s);
+  if(btn){btn.disabled=false;btn.textContent='Vào phòng';}
+}
+function fixups(){
+  const s=state;if(!s)return;
+  if(s.phase==='lobby'){
+    if(!s.players[myId]&&!(s.waiting||[]).some(w=>w.id===myId)){const ss=cur();addMe(ss);commit(ss);return;}
   }
 }
-function bobChoice(mode){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||!s.pending||s.pending.kind!=='bobChoice'){acting=false;render();return;}
-  const me=s.players[myId], targetId=s.pending.target, t=s.players[targetId], dmg=s.pending.dmg;
-  if(mode==='steal'&&t.arsenal.length){ const g=t.arsenal.shift(); me.arsenal.push(g); pushLog(s,`⚔️🎒 ${me.name} (Bob) cướp "${EQUIP[g].name}" từ ${t.name} thay vì gây sát thương.`); }
-  else { applyAttack(s,myId,targetId,dmg,'-','-'); }
-  s.pending=null; checkWin(s); afterAction(s); publishState(s); acting=false; render();
+function leaveRoom(){
+  act(s=>{if(s.phase==='lobby'&&s.players[myId]){delete s.players[myId];addLog(s,`${myName} rời sảnh.`);}s.waiting=(s.waiting||[]).filter(w=>w.id!==myId);if(s.host===myId)s.host=firstHuman(s);return true;});
+  joined=false;myName='';render();
 }
-// Charles: tấn công lại (tự chịu 2)
-function charlesReattack(){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||s.players[myId].char!=='charles'||!s.players[myId].revealed||!s.didAttack){acting=false;render();return;}
-  damage(s,myId,2,null); s.didAttack=false;
-  pushLog(s,`✨ ${s.players[myId].name} (Charles) tự chịu 2 máu để tấn công lại.`);
-  checkWin(s); publishState(s); acting=false; render();
-}
+function resetRoom(){if(!connected){setSyncError(true);return;}if(!confirm('Đặt lại phòng về sảnh trống? Ván đang chơi (nếu có) sẽ mất.'))return;const s=freshLobby();addMe(s);commit(s);}
+function claimHost(){act(s=>{if(!confirm('Nhận quyền chủ phòng?'))return false;s.host=myId;addLog(s,`👑 ${myName} làm chủ phòng.`);return true;});}
+function kickLobby(id){act(s=>{if(s.phase!=='lobby'||s.host!==myId||!s.players[id])return false;const n=s.players[id].name;delete s.players[id];addLog(s,`${n} bị xóa khỏi sảnh.`);return true;});}
+function addBot(){act(s=>{if(s.phase!=='lobby'||Object.keys(s.players).length>=8)return false;const n=Object.values(s.players).filter(p=>p.isBot).length+1;s.players['bot_'+Math.random().toString(36).slice(2,8)]={name:'Bot '+n,isBot:true};return true;});}
+function removeBot(){act(s=>{if(s.phase!=='lobby')return false;const b=Object.keys(s.players).filter(id=>s.players[id].isBot);if(!b.length)return false;delete s.players[b[b.length-1]];return true;});}
+function newLobbyFrom(s){const lobby=freshLobby();lobby.seq=s.seq||0;lobby.host=s.host;(s.order||[]).forEach(id=>{lobby.players[id]={name:s.players[id].name,isBot:!!s.players[id].isBot};});(s.waiting||[]).forEach(w=>{if(!lobby.players[w.id]&&Object.keys(lobby.players).length<8)lobby.players[w.id]={name:w.name,isBot:false};});if(!lobby.host||!lobby.players[lobby.host])lobby.host=firstHuman(lobby);addLog(lobby,'Ván mới — bấm Bắt đầu khi đủ người.');return lobby;}
 
-// ============ NĂNG LỰC / LỘ DIỆN ============
-function reveal(){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!s.players[myId]||!s.players[myId].alive){acting=false;render();return;}
-  s.players[myId].revealed=true; pushLog(s,`👁️ ${s.players[myId].name} lộ diện: ${roleTitle(s.players[myId])}.`);
-  publishState(s); acting=false; render();
-}
-function usePower(arg){
-  if(acting)return; acting=true; let s=cur();
-  const me=s.players[myId];
-  if(!s||!isMyTurn(s)||!me.revealed){acting=false;render();return;}
-  if(me.char==='allie'&&!me.usedPower){ me.hp=me.maxHp; me.usedPower=true; pushLog(s,`✨ ${me.name} (Allie) hồi đầy máu.`); }
-  else if((me.char==='franklin'||me.char==='george')&&!me.usedPower&&s.step==='move'){ s.pending={kind:'powerTarget',roll:me.char==='franklin'?'d6':'d4'}; }
-  else { acting=false; render(); return; }
-  publishState(s); acting=false; render();
-}
-function powerTarget(targetId){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||!isMyTurn(s)||!s.pending||s.pending.kind!=='powerTarget'){acting=false;render();return;}
-  const me=s.players[myId], t=s.players[targetId]; if(!t||!t.alive){acting=false;render();return;}
-  const r=s.pending.roll==='d6'?d6():d4(); damage(s,targetId,r,myId); me.usedPower=true;
-  pushLog(s,`✨ ${me.name} (${CHARACTERS[me.char].name}) gây ${r} sát thương lên ${t.name}.`);
-  s.pending=null; checkWin(s); publishState(s); acting=false; render();
+// ================= BẮT ĐẦU VÁN =================
+function startGame(s){
+  const ids=Object.keys(s.players);const n=ids.length;if(n<4||n>8)return false;
+  const [nh,ns,nn]=ALLOC[n];
+  const chars=shuffle([...shuffle(HUNTER_POOL).slice(0,nh),...shuffle(SHADOW_POOL).slice(0,ns),...shuffle(NEUTRAL_POOL).slice(0,nn)]);
+  const order=shuffle(ids);const players={};
+  order.forEach((id,i)=>{const ch=chars[i],c=CHARACTERS[ch];players[id]={name:s.players[id].name,isBot:!!s.players[id].isBot,char:ch,faction:c.faction,maxHp:c.hp,hp:c.hp,alive:true,left:false,area:null,revealed:false,equip:[],usedPower:false,kills:0,won:null};});
+  s.players=players;s.order=order;s.turnIdx=0;s.round=1;s.phase='playing';
+  const sh=shuffle(AREA_IDS);s.zones=[[sh[0],sh[1]],[sh[2],sh[3]],[sh[4],sh[5]]];
+  s.decks={white:shuffle(WHITE_DECK),black:shuffle(BLACK_DECK),hermit:shuffle(HERMIT_DECK)};s.discards={white:[],black:[],hermit:[]};
+  s.deathOrder=[];s.guarded={};s.lootQ=[];s.wins={};s.hermitLast=null;s.extraTurns=0;s.winner=null;s.log=[];
+  resetTurn(s);
+  addLog(s,`🌘 Ván bắt đầu với ${n} người: ${nh} Thợ Săn, ${ns} Bóng Tối, ${nn} Trung Lập. Lượt đầu: ${players[order[0]].name}.`);
+  return true;
 }
 
-// ============ KẾT THÚC LƯỢT ============
-function endTurn(){
-  if(acting)return; acting=true; let s=cur();
-  if(!s||s.phase!=='playing'||!isMyTurn(s)||s.pending){acting=false;render();return;}
-  if(s.extraTurn){ s.extraTurn=false; s.step='move'; s.didAction=false; s.didAttack=false; s.lastRoll=null;
-    pushLog(s,`🔁 ${s.players[myId].name} được thêm 1 lượt.`); publishState(s);acting=false;render(); return; }
-  advanceTurn(s); checkWin(s); publishState(s); acting=false; render();
+// ================= TRUY VẤN TRẠNG THÁI =================
+function TID(s){return s.order[s.turnIdx];}
+function P(s,id){return s.players[id];}
+function aliveIds(s){return s.order.filter(id=>s.players[id].alive);}
+function othersAlive(s,id){return aliveIds(s).filter(x=>x!==id);}
+function hasEq(p,cid){return !!(p&&p.equip&&p.equip.includes(cid));}
+function pendingActor(s){return s.pending?(s.pending.actor||TID(s)):TID(s);}
+function canAct(s,pid){if(!s||s.phase!=='playing')return false;const p=s.players[pid];if(!p||!p.alive)return false;return pendingActor(s)===pid;}
+function turnStep(s,pid,step){return s&&s.phase==='playing'&&TID(s)===pid&&s.players[pid].alive&&s.step===step&&!s.pending&&!s.atk;}
+function pend(s,pid,kind){return s&&s.phase==='playing'&&s.pending&&s.pending.kind===kind&&pendingActor(s)===pid&&s.players[pid]&&s.players[pid].alive;}
+function zoneOf(s,areaId){for(const z of s.zones){if(z.includes(areaId))return z;}return [areaId];}
+function attackTargets(s,pid){const p=s.players[pid];if(!p.area)return [];const areas=hasEq(p,'handgun')?AREA_IDS.filter(a=>a!==p.area):zoneOf(s,p.area);return aliveIds(s).filter(id=>id!==pid&&areas.includes(s.players[id].area));}
+function atkBonus(p){let b=0;p.equip.forEach(e=>{if(e==='butcher'||e==='chainsaw'||e==='broadaxe')b+=1;if(e==='holyrobe')b-=1;});return b;}
+function emiOptions(s,pid){const p=s.players[pid];if(!p.area)return [];const zi=s.zones.findIndex(z=>z.includes(p.area));const z=s.zones[zi];const side=z.indexOf(p.area);const out=[z[1-side]];if(s.zones[zi-1])out.push(s.zones[zi-1][1-side]);if(s.zones[zi+1])out.push(s.zones[zi+1][1-side]);return out;}
+function discardCard(s,cid){const C=CARDS[cid];if(C)s.discards[C.deck].push(cid);}
+function discardAll(s,p){(p.equip||[]).forEach(c=>discardCard(s,c));p.equip=[];}
+function draw(s,deck){const D=s.decks[deck];if(!D.length){const disc=s.discards[deck];if(!disc.length)return null;s.decks[deck]=shuffle(disc);s.discards[deck]=[];addLog(s,`🔄 Bộ ${deck==='white'?'Trắng':deck==='black'?'Đen':'Ẩn Sĩ'} hết, xào lại chồng bỏ.`);}return s.decks[deck].shift();}
+
+// ================= SÁT THƯƠNG / CHẾT / LƯỢM ĐỒ =================
+function heal(s,id,amt){const p=s.players[id];if(!p.alive||amt<=0)return 0;const before=p.hp;p.hp=Math.min(p.maxHp,p.hp+amt);return p.hp-before;}
+function damage(s,id,amt,srcId,isAttack){
+  const p=s.players[id];if(!p||!p.alive||amt<=0||s.phase!=='playing')return 0;
+  if(isAttack){
+    if(s.guarded&&s.guarded[id]){addLog(s,`🛡️ ${p.name} được Thiên Thần Hộ Mệnh che chở, không mất máu.`);return 0;}
+    if(hasEq(p,'holyrobe'))amt-=1;
+    if(amt<=0)return 0;
+  }
+  p.hp=Math.max(0,p.hp-amt);
+  if(p.hp<=0)die(s,id,srcId,isAttack);
+  return amt;
 }
-function advanceTurn(s){
-  if(!s.order.some(id=>s.players[id].alive))return;
-  // gỡ hộ mệnh của người sắp tới lượt (hết hiệu lực đến lượt kế của họ)
-  let next=s.turnIdx,g=0;
-  do{ next=(next+1)%s.order.length; g++; if(next===0)s.round++; } while(!s.players[s.order[next]].alive&&g<=s.order.length*3);
-  s.turnIdx=next; s.step='move'; s.didAction=false; s.didAttack=false; s.pending=null; s.lastRoll=null; s.extraTurn=false;
-  if(s.guarded) delete s.guarded[s.order[next]];
-  pushLog(s,`➡️ Vòng ${s.round} — lượt của ${s.players[s.order[next]].name}.`);
-}
-function autoAdvanceIfStuck(s){ if(s.phase==='playing'&&!s.players[turnId(s)].alive)advanceTurn(s); }
-
-// ============ THẮNG/THUA ============
-function factionLabel(f){return f==='hunter'?'Thợ Săn':f==='shadow'?'Bóng Tối':'Trung Lập';}
-function roleTitle(p){ const c=CHARACTERS[p.char]; return `${factionLabel(p.faction)} · ${c?c.name:''}`; }
-function checkWin(s){
-  if(s.phase!=='playing')return;
-  const aliveIds=s.order.filter(id=>s.players[id].alive);
-  if(aliveIds.length===0){ s.phase='ended'; s.winner='draw'; s.order.forEach(id=>s.players[id].won=false); pushLog(s,'🏁 Tất cả gục — hòa!'); return; }
-  const huntersAll=s.order.filter(id=>s.players[id].faction==='hunter');
-  const shadowsAll=s.order.filter(id=>s.players[id].faction==='shadow');
-  const hAlive=huntersAll.filter(id=>s.players[id].alive).length;
-  const sAlive=shadowsAll.filter(id=>s.players[id].alive).length;
-  const neutralsDead=s.order.filter(id=>s.players[id].faction==='neutral'&&!s.players[id].alive).length;
-  const deaths=s.deathOrder||[];
-
-  // Điều kiện phe (có thể kích hoạt bất cứ lúc nào)
-  let huntersWin = (shadowsAll.length>0 && sAlive===0);
-  let shadowsWin = (huntersAll.length>0 && hAlive===0) || neutralsDead>=3;
-
-  // Điều kiện Trung Lập cá nhân (một số kích hoạt tức thì)
-  const neutralWinNow = (id)=>{
-    const p=s.players[id];
-    switch(p.char){
-      case 'charles': return (p.kills>=1 && deaths.length>=3);
-      case 'daniel':  return (deaths[0]===id) || (p.alive && huntersWin);
-      case 'bob':     return (p.arsenal||[]).length>=5;
-      case 'catherine': return (deaths[0]===id) || (aliveIds.length<=2 && p.alive);
-      case 'allie':   return false; // chỉ xét ở cuối
-      default: return false;
-    }
-  };
-  const instantNeutral = s.order.filter(id=>s.players[id].faction==='neutral' && neutralWinNow(id));
-
-  let ended=false;
-  if(huntersWin||shadowsWin||instantNeutral.length>0) ended=true;
-  else if(s.round>=15) ended=true;
-  if(!ended) return;
-
-  // xác định người thắng
-  s.order.forEach(id=>{
-    const p=s.players[id];
-    if(p.faction==='hunter') p.won=huntersWin;
-    else if(p.faction==='shadow') p.won=shadowsWin;
-    else {
-      // Trung Lập: allie xét sống ở cuối; còn lại theo điều kiện
-      if(p.char==='allie') p.won=p.alive;
-      else p.won=neutralWinNow(id);
-    }
-  });
-  s.phase='ended';
-  s.winner = huntersWin?'hunter':shadowsWin?'shadow':(instantNeutral.length?'neutral':'draw');
-  const winners=s.order.filter(id=>s.players[id].won).map(id=>s.players[id].name);
-  pushLog(s,`🏁 Ván kết thúc! Người thắng: ${winners.length?winners.join(', '):'không ai'}.`);
-}
-
-// ============ BOT (TEST) ============
-function addBot(){ let s=cur(); if(!s||s.phase!=='lobby')return; if(Object.keys(s.players).length>=8)return; const n=Object.values(s.players).filter(p=>p.isBot).length+1; s.players['bot_'+Math.random().toString(36).slice(2,8)]={name:'Bot '+n,isBot:true}; publishState(s); render(); }
-function removeBot(){ let s=cur(); if(!s||s.phase!=='lobby')return; const b=Object.keys(s.players).filter(id=>s.players[id].isBot); if(!b.length)return; delete s.players[b[b.length-1]]; publishState(s); render(); }
-function controllerId(s){ const ids=s.order&&s.order.length?s.order:Object.keys(s.players); return ids.find(id=>!s.players[id].isBot); }
-function otherAlive(s,id){ return s.order.filter(x=>x!==id&&s.players[x].alive); }
-
-let botBusy=false;
-function scheduleBots(){
-  const s=state; if(!s||s.phase!=='playing')return;
-  if(controllerId(s)!==myId)return;                 // chỉ 1 máy (người thật đầu tiên) điều khiển bot
-  const tid=turnId(s);
-  if(!s.players[tid]||!s.players[tid].isBot||!s.players[tid].alive)return;
-  if(botBusy)return; botBusy=true;
-  setTimeout(()=>{
-    botBusy=false;
-    const st=state; if(!st||st.phase!=='playing'||turnId(st)!==tid||!st.players[tid]||!st.players[tid].isBot)return;
-    try{ botFullTurn(cur(), tid); }
-    catch(e){ console.error('bot err',e); const ss=cur(); if(ss&&ss.phase==='playing'&&turnId(ss)===tid){ advanceTurn(ss); checkWin(ss); publishState(ss); } }
-  }, 1300);
-}
-function botFullTurn(s,botId){
-  botSegment(s,botId);
-  if(s.phase==='playing'&&s.extraTurn){ s.extraTurn=false; pushLog(s,`🔁 ${s.players[botId].name} thêm 1 lượt.`); botSegment(s,botId); }
-  if(s.phase==='playing') advanceTurn(s);
+function die(s,id,killerId,byAttack){
+  const p=s.players[id];if(!p.alive)return;
+  p.alive=false;p.revealed=true;s.deathOrder.push(id);if(s.guarded)delete s.guarded[id];
+  addLog(s,`💀 ${p.name} gục ngã! Danh tính: ${roleTitle(p)}.`);
+  s.order.forEach(x=>{const q=s.players[x];if(x!==id&&q.alive&&q.char==='daniel'&&!q.revealed){q.revealed=true;addLog(s,`👁️ ${q.name} hét lên và lộ diện: Daniel (Trung Lập).`);}});
+  if(killerId&&killerId!==id&&s.players[killerId]){
+    const k=s.players[killerId];k.kills=(k.kills||0)+1;
+    if(byAttack&&k.char==='charles'&&s.deathOrder.length>=3){s.wins=s.wins||{};s.wins[killerId]=true;}
+    if(p.equip.length)s.lootQ.push({killer:killerId,victim:id,byAttack:!!byAttack});
+  }else if(p.equip.length)discardAll(s,p);
   checkWin(s);
-  publishState(s); render();
 }
-function botSegment(s,botId){
-  const me=s.players[botId]; if(!me.alive)return;
-  if(!me.revealed&&Math.random()<0.3){ me.revealed=true; pushLog(s,`👁️ ${me.name} lộ diện: ${roleTitle(me)}.`); }
-  if(me.revealed&&!me.usedPower){
-    if(me.char==='allie'&&me.hp<me.maxHp){ me.hp=me.maxHp; me.usedPower=true; pushLog(s,`✨ ${me.name} (Allie) hồi đầy máu.`); }
-    else if((me.char==='franklin'||me.char==='george')&&Math.random()<0.7){ const o=otherAlive(s,botId); if(o.length){const t=pick(o);const r=me.char==='franklin'?d6():d4();damage(s,t,r,botId);me.usedPower=true;pushLog(s,`✨ ${me.name} gây ${r} sát thương lên ${s.players[t].name}.`);} }
+function processLoots(s){
+  while(s.lootQ&&s.lootQ.length){
+    const L=s.lootQ[0];const k=s.players[L.killer],v=s.players[L.victim];
+    if(!k||!k.alive||!v.equip.length){discardAll(s,v);s.lootQ.shift();continue;}
+    if(L.byAttack&&hasEq(k,'rosary')){k.equip.push(...v.equip);addLog(s,`📿 ${k.name} (Chuỗi Bạc) lấy toàn bộ trang bị của ${v.name}: ${v.equip.map(eqName).join(', ')}.`);v.equip=[];s.lootQ.shift();continue;}
+    if(v.equip.length===1){const g=v.equip.pop();k.equip.push(g);addLog(s,`🎒 ${k.name} lấy "${eqName(g)}" của ${v.name}.`);s.lootQ.shift();continue;}
+    s.pending={kind:'loot',actor:L.killer,victim:L.victim};return true;
   }
-  if(!me.alive)return;
-  // di chuyển
-  let a=d6(),b=d4(),sum=a+b,area;
-  if(sum===7) area=pick(AREA_IDS.filter(x=>x!==me.area));
-  else { area=numToArea(sum); if(area===me.area) area=pick(AREA_IDS.filter(x=>x!==me.area)); }
-  me.area=area; s.lastRoll={by:botId,name:me.name,d6:a,d4:b,sum,kind:'move'};
-  pushLog(s,`🎲 ${me.name} tung ${a}+${b}=${sum} → ${AREAS[area].name}.`);
-  botArea(s,botId);
-  if(!me.alive)return;
-  botAttack(s,botId);
+  return false;
 }
-function botArea(s,botId){
-  const me=s.players[botId], area=me.area;
-  if(area==='church') botWhite(s,botId);
-  else if(area==='cemetery') botBlack(s,botId);
-  else if(area==='hermit') botHermit(s,botId);
-  else if(area==='gate'){ const d=pick(['white','black','hermit']); if(d==='white')botWhite(s,botId); else if(d==='black')botBlack(s,botId); else botHermit(s,botId); }
-  else if(area==='woods'){ const o=otherAlive(s,botId); if(o.length&&Math.random()<0.6){const t=pick(o); if(!hasEquip(s,t,'noWoods')){damage(s,t,2,botId);pushLog(s,`🌲 ${me.name} gây 2 sát thương ${s.players[t].name}.`);}} else {heal(s,botId,1);pushLog(s,`🌲 ${me.name} hồi 1 máu (Rừng).`);} }
-  else if(area==='altar'){ const tg=otherAlive(s,botId).filter(x=>s.players[x].arsenal.length); if(tg.length){const t=pick(tg);const g=s.players[t].arsenal.shift();me.arsenal.push(g);pushLog(s,`🏛️ ${me.name} cướp "${EQUIP[g].name}" từ ${s.players[t].name}.`);} }
-}
-function botWhite(s,botId){
-  const id=pick(WHITE_DECK), me=s.players[botId], o=otherAlive(s,botId);
-  if(EQUIP[id]){ me.arsenal.push(id); pushLog(s,`⬜ ${me.name} rút thẻ Trắng: trang bị "${EQUIP[id].name}".`); return; }
-  switch(id){
-    case 'advent': if(me.faction==='hunter'){me.revealed=true;me.hp=me.maxHp;pushLog(s,`⬜ ${me.name}: Giáng Thế → lộ diện & hồi đầy.`);}else pushLog(s,`⬜ ${me.name}: Giáng Thế vô hiệu.`); break;
-    case 'blessing': if(o.length){const t=pick(o);const h=d6();heal(s,t,h);pushLog(s,`⬜ ${me.name} ban phước ${s.players[t].name}: +${h}.`);} break;
-    case 'firstaid': { const t=pick([botId,...o]); s.players[t].hp=clamp(s.players[t].maxHp-7,0,s.players[t].maxHp); pushLog(s,`⬜ ${me.name} Sơ Cứu ${s.players[t].name}: đặt sát thương về 7.`); checkDeath(s,t,botId); break; }
-    case 'flare': pushLog(s,`⬜ ${me.name}: Ánh Sáng Phán Xét — mọi người khác -2.`); o.forEach(t=>damage(s,t,2,botId)); break;
-    case 'guardian': s.guarded=s.guarded||{}; s.guarded[botId]=true; pushLog(s,`⬜ ${me.name}: Thiên Thần Hộ Mệnh.`); break;
-    case 'holywater': heal(s,botId,2); pushLog(s,`⬜ ${me.name}: Nước Thánh +2.`); break;
-    case 'concealed': s.extraTurn=true; pushLog(s,`⬜ ${me.name}: Tri Thức Giấu Kín — thêm lượt.`); break;
-  }
-}
-function botBlack(s,botId){
-  const id=pick(BLACK_DECK), me=s.players[botId], o=otherAlive(s,botId);
-  if(EQUIP[id]){ me.arsenal.push(id); pushLog(s,`⬛ ${me.name} rút thẻ Đen: trang bị "${EQUIP[id].name}".`); return; }
-  switch(id){
-    case 'bananapeel': if(me.arsenal.length&&o.length){const g=me.arsenal.shift();const t=pick(o);s.players[t].arsenal.push(g);pushLog(s,`⬛ ${me.name} đưa "${EQUIP[g].name}" cho ${s.players[t].name}.`);}else{damage(s,botId,1,null);pushLog(s,`⬛ ${me.name}: Vỏ Chuối -1.`);} break;
-    case 'spider': if(o.length){const t=pick(o);if(!hasEquip(s,t,'talisman'))damage(s,t,2,botId);}damage(s,botId,2,null);pushLog(s,`⬛ ${me.name}: Nhện Khát Máu (tự -2).`); break;
-    case 'ritual': if(me.faction==='shadow'){me.revealed=true;me.hp=me.maxHp;pushLog(s,`⬛ ${me.name}: Nghi Lễ → lộ diện & hồi đầy.`);}else pushLog(s,`⬛ ${me.name}: Nghi Lễ vô hiệu.`); break;
-    case 'dynamite': { const a=d6(),b=d4(),sum=a+b; if(sum!==7){const ar=numToArea(sum);const v=s.order.filter(x=>s.players[x].alive&&s.players[x].area===ar);v.forEach(x=>{if(!hasEquip(s,x,'talisman'))damage(s,x,3,botId);});pushLog(s,`⬛💥 ${me.name} Thuốc Nổ ở ${AREAS[ar].name}.`);}else pushLog(s,`⬛ ${me.name} Thuốc Nổ: tung 7, hụt.`);} break;
-    case 'goblin': { const tg=o.filter(x=>s.players[x].arsenal.length); if(tg.length){const t=pick(tg);const g=s.players[t].arsenal.shift();me.arsenal.push(g);pushLog(s,`⬛ ${me.name} cướp "${EQUIP[g].name}" từ ${s.players[t].name}.`);} } break;
-    case 'doll': if(o.length){const t=pick(o);const r=d6();if(r<=4){damage(s,t,3,botId);pushLog(s,`⬛ ${me.name} Búp Bê (${r}): ${s.players[t].name} -3.`);}else{damage(s,botId,3,null);pushLog(s,`⬛ ${me.name} Búp Bê (${r}): tự -3.`);}} break;
-    case 'bat': if(o.length){const t=pick(o);if(!hasEquip(s,t,'talisman'))damage(s,t,2,botId);}heal(s,botId,1);pushLog(s,`⬛ ${me.name}: Dơi Hút Máu.`); break;
-  }
-}
-function botHermit(s,botId){
-  const card=pick(HERMIT_DECK), me=s.players[botId], o=otherAlive(s,botId); if(!o.length)return;
-  const tId=pick(o), tp=s.players[tId], match=hermitMatch(card.cond,tp), ignore=(tp.char==='unknown'); let result;
-  if(card.eff==='showToGiver'){ result='cho người đưa xem danh tính'; s.visionReveal={by:botId,target:tId,card:card.t,desc:hermitDesc(card),secret:`${tp.name} là ${roleTitle(tp)}`,result,ts:Date.now()}; }
-  else if(!match||ignore){ result=(ignore&&match)?'phớt lờ (Unknown)':'không hề hấn gì'; s.visionReveal={by:botId,target:tId,card:card.t,desc:hermitDesc(card),result,ts:Date.now()}; }
-  else { if(card.eff==='dmg1'){damage(s,tId,1,botId);result=`${tp.name} -1`;} else if(card.eff==='dmg2'){damage(s,tId,2,botId);result=`${tp.name} -2`;} else if(card.eff==='heal1else1'){heal(s,tId,1);result=`${tp.name} +1`;} else if(card.eff==='giveOrDmg'){ if(tp.arsenal.length){const g=tp.arsenal.shift();me.arsenal.push(g);result=`${tp.name} đưa "${EQUIP[g].name}"`;}else{damage(s,tId,1,botId);result=`${tp.name} -1`;} } s.visionReveal={by:botId,target:tId,card:card.t,desc:hermitDesc(card),result,ts:Date.now()}; }
-  pushLog(s,`🟢 ${me.name} đưa 1 thẻ Ẩn Sĩ cho ${tp.name} → ${result}.`);
-}
-function botAttack(s,botId){
-  const me=s.players[botId]; if(!me.alive)return;
-  const range=attackRange(s,botId), targets=playersInAreas(s,range,botId);
-  if(!targets.length||Math.random()<0.4)return;
-  const tId=pick(targets); let a=d6(),b=d4(),diff=Math.abs(a-b); if(hasEquip(s,botId,'d4atk')){b=d4();diff=b;a='-';}
-  let dmg=diff>0?diff+atkBonus(s,botId):0;
-  s.lastRoll={by:botId,name:me.name,d6:a,d4:b,sum:diff,kind:'attack',target:s.players[tId].name};
-  if(dmg>0) applyAttack(s,botId,tId,dmg,a,b); else pushLog(s,`⚔️ ${me.name} tấn công ${s.players[tId].name} nhưng trượt.`);
+function checkWin(s){
+  if(s.phase!=='playing')return false;
+  const ids=s.order.filter(id=>!s.players[id].left);const g=id=>s.players[id];
+  const alive=ids.filter(id=>g(id).alive);
+  const hunters=ids.filter(id=>g(id).faction==='hunter'),shadows=ids.filter(id=>g(id).faction==='shadow');
+  const neutralsDead=ids.filter(id=>g(id).faction==='neutral'&&!g(id).alive).length;
+  const huntersWin=shadows.length===0?hunters.length>0:shadows.every(id=>!g(id).alive);
+  const shadowsWin=(hunters.length===0?shadows.length>0:hunters.every(id=>!g(id).alive))||neutralsDead>=3;
+  const factionsGone=hunters.length===0&&shadows.length===0;
+  const deaths=s.deathOrder||[];
+  const nw=id=>{const p=g(id);switch(p.char){case 'bob':return p.alive&&p.equip.length>=5;case 'charles':return !!(s.wins&&s.wins[id]);case 'daniel':return deaths[0]===id||(p.alive&&huntersWin);default:return false;}};
+  const instant=ids.filter(id=>g(id).faction==='neutral'&&nw(id));
+  if(!(huntersWin||shadowsWin||instant.length||alive.length===0||factionsGone))return false;
+  ids.forEach(id=>{const p=g(id);p.won=p.faction==='hunter'?huntersWin:p.faction==='shadow'?shadowsWin:(p.char==='allie'?p.alive:nw(id));});
+  s.phase='ended';s.pending=null;s.atk=null;s.lootQ=[];
+  s.winner=huntersWin?'hunter':shadowsWin?'shadow':instant.length?'neutral':'draw';
+  const winners=ids.filter(id=>g(id).won).map(id=>g(id).name);
+  addLog(s,`🏁 Ván kết thúc! ${winners.length?'Thắng: '+winners.join(', ')+'.':'Không ai thắng.'}`);
+  return true;
 }
 
-// ============ POPUP ============
-let lastLogSeen=-1, lastVisionTs=0;
-function pushToast(lines){
-  const stack=document.getElementById('toastStack'); if(!stack)return;
-  const el=document.createElement('div');
-  el.style.cssText='pointer-events:auto;max-width:520px;width:100%;background:#241f38;border:1px solid var(--gold);border-radius:14px;padding:10px 14px;box-shadow:0 10px 30px rgba(0,0,0,.6);animation:toastIn .2s ease;cursor:pointer;';
-  el.innerHTML=`<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><b style="color:var(--gold);font-size:.8rem;">📣 Diễn biến</b><span class="muted" style="font-size:.68rem;">chạm để đóng</span></div><div style="font-size:.85rem;color:#e8e4f5;line-height:1.45;">${lines.map(l=>`<div>${l}</div>`).join('')}</div>`;
-  const rm=()=>{if(el.parentNode){el.style.transition='opacity .25s';el.style.opacity='0';setTimeout(()=>el.remove(),250);}};
-  el.onclick=rm; stack.appendChild(el);
-  while(stack.children.length>5)stack.firstChild.remove();
-  setTimeout(rm,10000);
+// ================= LƯỢT =================
+function resetTurn(s){s.step='move';s.areaDone=false;s.attacked=false;s.lastTargets=null;s.pending=null;s.atk=null;s.lastRoll=null;}
+function advanceTurn(s){
+  if(s.phase!=='playing')return;
+  const n=s.order.length;let i=s.turnIdx,g=0;
+  do{i=(i+1)%n;if(i===0)s.round++;g++;}while(g<=n&&!s.players[s.order[i]].alive);
+  if(!s.players[s.order[i]].alive){checkWin(s);return;}
+  s.turnIdx=i;s.extraTurns=0;resetTurn(s);
+  if(s.guarded)delete s.guarded[s.order[i]];
+  addLog(s,`➡️ Vòng ${s.round} — lượt của ${s.players[s.order[i]].name}.`);
 }
-function processEvents(s){
-  if(!s||!s.log)return;
-  if(lastLogSeen===-1||s.log.length<lastLogSeen){lastLogSeen=s.log.length;lastVisionTs=s.visionReveal?s.visionReveal.ts:0;return;}
-  const v=s.visionReveal;
-  if(v&&v.ts>lastVisionTs){ lastVisionTs=v.ts;
-    if(myId===v.by||myId===v.target){
-      const who=myId===v.by?'Bạn ĐƯA':'Bạn NHẬN';
-      let extra=''; if(v.secret&&myId===v.by)extra='\n\n'+v.secret;
-      setTimeout(()=>alert(`🟢 Thẻ Ẩn Sĩ (chỉ bạn và người kia biết nội dung)\n\n"${v.card}"\n${v.desc}\n\n${who}. Kết quả: ${v.result}.${extra}`),150);
+function areaDone(s){s.areaDone=true;if(s.step==='area')s.step='attack';}
+// Gọi sau mỗi hành động: xử lý lượm đồ, đòn đang dang dở, người tới lượt đã chết
+function afterAction(s){
+  for(let guard=0;guard<10;guard++){
+    checkWin(s);
+    if(s.phase!=='playing'||s.pending)return;
+    if(s.atk){resumeAttack(s);if(s.pending||s.atk)return;continue;}
+    if(processLoots(s))return;
+    const tp=s.players[TID(s)];
+    if(!tp||!tp.alive){advanceTurn(s);return;}
+    return;
+  }
+}
+function normalize(s){
+  if(s.phase==='playing'){
+    if(s.pending){const a=s.players[pendingActor(s)];if(!a||!a.alive){forceDefault(s);}}
+    afterAction(s);
+    checkWin(s);
+  }
+  if(!s.host||!s.players[s.host]||s.players[s.host].isBot)s.host=firstHuman(s);
+}
+
+// ================= HÀNH ĐỘNG (dùng chung cho người và bot) =================
+const H={};
+// --- lộ diện / năng lực ---
+H.reveal=function(s,pid){const me=P(s,pid);if(!me||!me.alive||me.revealed||me.char==='daniel'||s.phase!=='playing')return false;me.revealed=true;addLog(s,`👁️ ${me.name} lộ diện: ${roleTitle(me)}.`);return true;};
+H.usePower=function(s,pid){
+  const me=P(s,pid);if(!me||!me.alive||!me.revealed||me.usedPower||s.phase!=='playing')return false;
+  if(me.char==='allie'){me.hp=me.maxHp;me.usedPower=true;addLog(s,`✨ ${me.name} (Allie) hồi đầy máu.`);return true;}
+  if(me.char==='franklin'||me.char==='george'){
+    if(!turnStep(s,pid,'move'))return false;
+    const tg=othersAlive(s,pid);if(!tg.length)return false;
+    s.pending={kind:'powerTarget',actor:pid,targets:tg};return true;
+  }
+  return false;
+};
+H.powerTarget=function(s,pid,t){
+  if(!pend(s,pid,'powerTarget')||!s.pending.targets.includes(t))return false;
+  const me=P(s,pid);const r=me.char==='franklin'?d6():d4();me.usedPower=true;s.pending=null;
+  s.lastRoll={name:me.name,a:r,b:null,sum:r,kind:'power'};
+  addLog(s,`⚡ ${me.name} (${CHARACTERS[me.char].name}) tung ${me.char==='franklin'?'d6':'d4'} = ${r}: ${P(s,t).name} chịu ${r} sát thương.`);
+  damage(s,t,r,pid,false);afterAction(s);return true;
+};
+H.wightUse=function(s,pid){
+  const me=P(s,pid);if(!turnStep(s,pid,'attack')||!s.attacked||me.char!=='wight'||!me.revealed||me.usedPower)return false;
+  const n=s.deathOrder.length;if(!n)return false;
+  me.usedPower=true;s.extraTurns=(s.extraTurns||0)+n;addLog(s,`🧟 ${me.name} (Wight) dùng Nhân Bản: được thêm ${n} lượt.`);return true;
+};
+// --- di chuyển ---
+function rollMoveOnce(){const a=d6(),b=d4();return {a,b,sum:a+b};}
+H.rollMove=function(s,pid){
+  if(!turnStep(s,pid,'move'))return false;const me=P(s,pid);
+  if(hasEq(me,'compass')){const r1=rollMoveOnce(),r2=rollMoveOnce();s.pending={kind:'chooseRoll',actor:pid,rolls:[r1,r2]};addLog(s,`🧭 ${me.name} dùng La Bàn, tung 2 lần: ${r1.a}+${r1.b}=${r1.sum} và ${r2.a}+${r2.b}=${r2.sum}.`);return true;}
+  applyRoll(s,pid,rollMoveOnce());return true;
+};
+H.chooseRoll=function(s,pid,i){if(!pend(s,pid,'chooseRoll'))return false;const r=s.pending.rolls[i];if(!r)return false;s.pending=null;applyRoll(s,pid,r);return true;};
+function applyRoll(s,pid,r){
+  const me=P(s,pid);let txt=`🎲 ${me.name} tung ${r.a}+${r.b}=${r.sum}`;s.lastRoll={name:me.name,a:r.a,b:r.b,sum:r.sum,kind:'move'};
+  let area=r.sum===7?null:numToArea(r.sum);let guard=0;
+  while(r.sum!==7&&area===me.area&&guard<30){const rr=rollMoveOnce();txt+=` (trùng khu, tung lại ${rr.a}+${rr.b}=${rr.sum})`;s.lastRoll={name:me.name,a:rr.a,b:rr.b,sum:rr.sum,kind:'move'};r=rr;area=r.sum===7?null:numToArea(r.sum);guard++;}
+  if(r.sum===7){s.pending={kind:'chooseArea',actor:pid};addLog(s,txt+': được chọn khu bất kỳ.');return;}
+  moveTo(s,pid,area,txt);
+}
+H.chooseArea=function(s,pid,area){if(!pend(s,pid,'chooseArea')||!AREAS[area]||area===P(s,pid).area)return false;s.pending=null;moveTo(s,pid,area,`➡️ ${P(s,pid).name} chọn`);return true;};
+H.emiMove=function(s,pid,area){if(!turnStep(s,pid,'move'))return false;const me=P(s,pid);if(me.char!=='emi'||!me.revealed||!emiOptions(s,pid).includes(area))return false;moveTo(s,pid,area,`✨ ${me.name} (Emi) dịch chuyển`);return true;};
+function moveTo(s,pid,area,txt){const me=P(s,pid);me.area=area;s.step='area';s.areaDone=false;addLog(s,`${txt} → ${AREAS[area].name}.`);}
+// --- hành động khu ---
+H.doArea=function(s,pid){
+  if(!turnStep(s,pid,'area'))return false;const me=P(s,pid);
+  switch(me.area){
+    case 'church':drawPlay(s,pid,'white');break;
+    case 'cemetery':drawPlay(s,pid,'black');break;
+    case 'hermit':drawHermit(s,pid);break;
+    case 'gate':s.pending={kind:'gateDeck',actor:pid};break;
+    case 'woods':s.pending={kind:'woods',actor:pid,targets:aliveIds(s)};break;
+    case 'altar':{const tg=othersAlive(s,pid).filter(x=>P(s,x).equip.length);if(!tg.length){addLog(s,`🏛️ ${me.name} ở Bàn Thờ Cổ nhưng không ai có trang bị.`);areaDone(s);}else s.pending={kind:'stealTarget',actor:pid,src:'altar',targets:tg};break;}
+    default:areaDone(s);
+  }
+  afterAction(s);return true;
+};
+H.skipArea=function(s,pid){if(!turnStep(s,pid,'area'))return false;addLog(s,`${P(s,pid).name} bỏ qua hành động khu.`);areaDone(s);return true;};
+H.gatePick=function(s,pid,deck){if(!pend(s,pid,'gateDeck'))return false;s.pending=null;if(deck==='hermit')drawHermit(s,pid);else if(deck==='white'||deck==='black')drawPlay(s,pid,deck);else return false;afterAction(s);return true;};
+function drawPlay(s,pid,deck){
+  const me=P(s,pid);const cid=draw(s,deck);
+  if(!cid){addLog(s,`Bộ bài trống, không rút được.`);areaDone(s);return;}
+  const C=CARDS[cid];addLog(s,`${deck==='white'?'⬜':'⬛'} ${me.name} rút thẻ ${deck==='white'?'Trắng':'Đen'} "${C.name}": ${C.desc}`);
+  if(C.type==='equip'){me.equip.push(cid);areaDone(s);return;}
+  discardCard(s,cid);playSingle(s,pid,cid);
+}
+function playSingle(s,pid,cid){
+  const me=P(s,pid);
+  const optReveal=(ok,who)=>{if(!ok){addLog(s,`${me.name} không phải ${who}: không có gì xảy ra.`);areaDone(s);return;}if(me.revealed){me.hp=me.maxHp;addLog(s,`${me.name} đã lộ diện sẵn → hồi đầy máu.`);areaDone(s);return;}s.pending={kind:'optReveal',actor:pid,card:cid};};
+  switch(cid){
+    case 'advent':optReveal(me.faction==='hunter','Thợ Săn');break;
+    case 'ritual':optReveal(me.faction==='shadow','Bóng Tối');break;
+    case 'chocolate':optReveal(me.char==='allie'||me.char==='emi','Allie/Emi');break;
+    case 'mirror':if(['vampire','werewolf','wight'].includes(me.char)){if(!me.revealed){me.revealed=true;addLog(s,`🪞 ${me.name} buộc phải lộ diện: ${roleTitle(me)}.`);}else addLog(s,`🪞 ${me.name} đã lộ diện sẵn.`);}else addLog(s,`🪞 ${me.name}: không có gì xảy ra.`);areaDone(s);break;
+    case 'blessing':{const tg=othersAlive(s,pid);if(!tg.length){areaDone(s);break;}s.pending={kind:'cardTarget',actor:pid,card:cid,targets:tg};break;}
+    case 'firstaid':case 'spider':case 'doll':case 'bat':s.pending={kind:'cardTarget',actor:pid,card:cid,targets:aliveIds(s)};break;
+    case 'flare':othersAlive(s,pid).forEach(x=>{if(s.phase==='playing')damage(s,x,2,pid,false);});areaDone(s);break;
+    case 'guardian':s.guarded=s.guarded||{};s.guarded[pid]=true;areaDone(s);break;
+    case 'holywater':{const h=heal(s,pid,2);addLog(s,`${me.name} hồi ${h} máu.`);areaDone(s);break;}
+    case 'concealed':s.extraTurns=(s.extraTurns||0)+1;areaDone(s);break;
+    case 'banana':if(me.equip.length)s.pending={kind:'bananaItem',actor:pid};else{addLog(s,`${me.name} không có trang bị → chịu 1 sát thương.`);damage(s,pid,1,null,false);areaDone(s);}break;
+    case 'dynamite':{const a=d6(),b=d4(),sum=a+b;s.lastRoll={name:me.name,a,b,sum,kind:'dynamite'};if(sum===7){addLog(s,`💨 Tung ${a}+${b}=7: không nổ.`);}else{const ar=numToArea(sum);const v=aliveIds(s).filter(x=>P(s,x).area===ar);addLog(s,`💥 Tung ${a}+${b}=${sum}: nổ ở ${AREAS[ar].name}${v.length?' — '+v.map(x=>P(s,x).name).join(', '):' (không có ai)'}.`);v.forEach(x=>{if(s.phase!=='playing')return;if(hasEq(P(s,x),'talisman'))addLog(s,`🧿 ${P(s,x).name} có Bùa Hộ Mệnh, không mất máu.`);else damage(s,x,3,pid,false);});}areaDone(s);break;}
+    case 'goblin':{const tg=othersAlive(s,pid).filter(x=>P(s,x).equip.length);if(!tg.length){addLog(s,`Không ai có trang bị để cướp.`);areaDone(s);}else s.pending={kind:'stealTarget',actor:pid,src:'goblin',targets:tg};break;}
+    default:areaDone(s);
+  }
+}
+H.optReveal=function(s,pid,yes){
+  if(!pend(s,pid,'optReveal'))return false;const me=P(s,pid);s.pending=null;
+  if(yes){me.revealed=true;me.hp=me.maxHp;addLog(s,`👁️ ${me.name} lộ diện: ${roleTitle(me)} → hồi đầy máu.`);}else addLog(s,`${me.name} chọn không lộ diện.`);
+  areaDone(s);afterAction(s);return true;
+};
+H.cardTarget=function(s,pid,t){
+  if(!pend(s,pid,'cardTarget')||!s.pending.targets.includes(t))return false;
+  const me=P(s,pid),tp=P(s,t),card=s.pending.card;s.pending=null;
+  switch(card){
+    case 'blessing':{const r=d6();const h=heal(s,t,r);s.lastRoll={name:me.name,a:r,b:null,sum:r,kind:'blessing'};addLog(s,`⬜ ${me.name} ban phước ${tp.name}: tung ${r}, hồi ${h} máu.`);break;}
+    case 'firstaid':tp.hp=Math.max(1,tp.maxHp-7);addLog(s,`⬜ ${me.name} dùng Sơ Cứu: sát thương của ${tp.name} đặt về 7.`);break;
+    case 'spider':addLog(s,`⬛ ${me.name} thả Nhện Khát Máu vào ${tp.name}.`);if(hasEq(tp,'talisman'))addLog(s,`🧿 ${tp.name} có Bùa Hộ Mệnh, không mất máu.`);else damage(s,t,2,pid,false);if(hasEq(me,'talisman'))addLog(s,`🧿 ${me.name} có Bùa Hộ Mệnh, không mất máu.`);else damage(s,pid,2,null,false);break;
+    case 'doll':{const r=d6();s.lastRoll={name:me.name,a:r,b:null,sum:r,kind:'doll'};if(r<=4){addLog(s,`⬛ Búp Bê Nguyền (tung ${r}): ${tp.name} chịu 3 sát thương.`);damage(s,t,3,pid,false);}else{addLog(s,`⬛ Búp Bê Nguyền (tung ${r}): ${me.name} tự chịu 3 sát thương.`);damage(s,pid,3,null,false);}break;}
+    case 'bat':addLog(s,`⬛ ${me.name} thả Dơi Hút Máu vào ${tp.name}.`);if(hasEq(tp,'talisman'))addLog(s,`🧿 ${tp.name} có Bùa Hộ Mệnh, không mất máu.`);else damage(s,t,2,pid,false);{const h=heal(s,pid,1);if(h)addLog(s,`${me.name} hồi ${h} máu.`);}break;
+  }
+  areaDone(s);afterAction(s);return true;
+};
+H.bananaItem=function(s,pid,i){if(!pend(s,pid,'bananaItem'))return false;const me=P(s,pid);if(!me.equip[i])return false;const tg=othersAlive(s,pid);if(!tg.length){areaDone(s);s.pending=null;afterAction(s);return true;}const item=me.equip.splice(i,1)[0];s.pending={kind:'bananaTarget',actor:pid,item,targets:tg};return true;};
+H.bananaTarget=function(s,pid,t){if(!pend(s,pid,'bananaTarget')||!s.pending.targets.includes(t))return false;const item=s.pending.item;s.pending=null;P(s,t).equip.push(item);addLog(s,`⬛ ${P(s,pid).name} (Vỏ Chuối) đưa "${eqName(item)}" cho ${P(s,t).name}.`);areaDone(s);afterAction(s);return true;};
+H.stealTarget=function(s,pid,t){
+  if(!pend(s,pid,'stealTarget')||!s.pending.targets.includes(t))return false;const src=s.pending.src;const tp=P(s,t);
+  if(!tp.equip.length){s.pending=null;areaDone(s);afterAction(s);return true;}
+  if(tp.equip.length===1){s.pending=null;const g=tp.equip.pop();P(s,pid).equip.push(g);addLog(s,`${src==='altar'?'🏛️':'⬛'} ${P(s,pid).name} cướp "${eqName(g)}" từ ${tp.name}.`);areaDone(s);afterAction(s);return true;}
+  s.pending={kind:'stealItem',actor:pid,src,target:t};return true;
+};
+H.stealItem=function(s,pid,i){if(!pend(s,pid,'stealItem'))return false;const tp=P(s,s.pending.target);if(!tp.equip[i])return false;const src=s.pending.src;s.pending=null;const g=tp.equip.splice(i,1)[0];P(s,pid).equip.push(g);addLog(s,`${src==='altar'?'🏛️':'⬛'} ${P(s,pid).name} cướp "${eqName(g)}" từ ${tp.name}.`);areaDone(s);afterAction(s);return true;};
+H.woodsDo=function(s,pid,t,mode){
+  if(!pend(s,pid,'woods')||!s.pending.targets.includes(t))return false;const me=P(s,pid),tp=P(s,t);s.pending=null;
+  if(mode==='dmg'){if(hasEq(tp,'brooch'))addLog(s,`🌲 ${me.name} định hại ${tp.name} ở Rừng nhưng Trâm May Mắn chặn lại.`);else{addLog(s,`🌲 ${me.name} gây 2 sát thương cho ${tp.name} ở Rừng Quái Dị.`);damage(s,t,2,pid,false);}}
+  else{const h=heal(s,t,1);addLog(s,`🌲 ${me.name} hồi ${h} máu cho ${tp.name} ở Rừng Quái Dị.`);}
+  areaDone(s);afterAction(s);return true;
+};
+// --- thẻ Ẩn Sĩ ---
+function drawHermit(s,pid){const cid=draw(s,'hermit');if(!cid){areaDone(s);return;}s.discards.hermit.push(cid);s.pending={kind:'hermitGive',actor:pid,card:cid};addLog(s,`🟢 ${P(s,pid).name} rút 1 thẻ Ẩn Sĩ và đang chọn người để đưa.`);}
+H.hermitGive=function(s,pid,t){
+  if(!pend(s,pid,'hermitGive')||t===pid)return false;const tp=P(s,t);if(!tp||!tp.alive)return false;
+  const cid=s.pending.card,Hc=HERMIT[cid],me=P(s,pid);s.pending=null;
+  addLog(s,`🟢 ${me.name} đưa 1 thẻ Ẩn Sĩ cho ${tp.name}.`);
+  const match=hermitMatch(Hc.cond,tp);
+  if(match&&Hc.eff==='giveOrDmg'&&tp.equip.length){
+    s.pending={kind:'hermitChoice',actor:t,card:cid,from:pid};
+    s.hermitLast={n:s.seq,by:pid,to:t,cid,result:'Trúng điều kiện. Đang chờ người nhận chọn: đưa 1 trang bị hoặc chịu 1 sát thương.',waiting:true};
+    areaDone(s);return true;
+  }
+  let pub,priv,secret=null;
+  if(!match){pub=`${tp.name}: không có gì xảy ra.`;priv='Không trúng điều kiện → không có gì xảy ra.';}
+  else switch(Hc.eff){
+    case 'dmg1':pub=`${tp.name} chịu 1 sát thương.`;priv='Trúng điều kiện → chịu 1 sát thương.';damage(s,t,1,pid,false);break;
+    case 'dmg2':pub=`${tp.name} chịu 2 sát thương.`;priv='Trúng điều kiện → chịu 2 sát thương.';damage(s,t,2,pid,false);break;
+    case 'healOrDmg':if(tp.hp<tp.maxHp){heal(s,t,1);pub=`${tp.name} hồi 1 máu.`;priv='Trúng điều kiện → hồi 1 máu.';}else{pub=`${tp.name} chịu 1 sát thương.`;priv='Trúng điều kiện nhưng đang đầy máu → chịu 1 sát thương.';damage(s,t,1,pid,false);}break;
+    case 'giveOrDmg':pub=`${tp.name} chịu 1 sát thương.`;priv='Trúng điều kiện, không có trang bị → chịu 1 sát thương.';damage(s,t,1,pid,false);break;
+    case 'show':pub=`${tp.name}: không có gì xảy ra.`;priv='Người nhận cho người đưa xem danh tính.';secret=`${tp.name} là ${roleTitle(tp)}.`;break;
+  }
+  s.hermitLast={n:s.seq,by:pid,to:t,cid,result:priv,secret,waiting:false};
+  addLog(s,pub);areaDone(s);afterAction(s);return true;
+};
+H.hermitChoice=function(s,pid,choice){
+  if(!pend(s,pid,'hermitChoice'))return false;const me=P(s,pid),from=s.pending.from,g=P(s,from);let pub,priv;
+  if(choice==='dmg'){s.pending=null;pub=`${me.name} chịu 1 sát thương.`;priv='Người nhận chọn chịu 1 sát thương.';damage(s,pid,1,from,false);}
+  else{const i=Number(choice);if(!me.equip[i])return false;s.pending=null;const item=me.equip.splice(i,1)[0];if(g&&g.alive)g.equip.push(item);else discardCard(s,item);pub=`${me.name} đưa "${eqName(item)}" cho ${g?g.name:'?'}.`;priv=`Người nhận đưa "${eqName(item)}".`;}
+  s.hermitLast=Object.assign({},s.hermitLast||{},{n:s.seq,result:priv,waiting:false});
+  addLog(s,pub);afterAction(s);return true;
+};
+// --- tấn công ---
+H.attackTarget=function(s,pid,t){
+  if(!turnStep(s,pid,'attack')||s.attacked)return false;const me=P(s,pid);const tg=attackTargets(s,pid);if(!tg.length)return false;
+  let targets;if(hasEq(me,'machinegun'))targets=tg;else{if(!tg.includes(t))return false;targets=[t];}
+  startAttack(s,pid,targets,{});afterAction(s);return true;
+};
+H.noAttack=function(s,pid){if(!turnStep(s,pid,'attack')||s.attacked)return false;const me=P(s,pid);if(hasEq(me,'masamune')&&attackTargets(s,pid).length)return false;s.attacked=true;addLog(s,`🤝 ${me.name} không tấn công.`);return true;};
+H.charlesAgain=function(s,pid){
+  if(!turnStep(s,pid,'attack')||!s.attacked)return false;const me=P(s,pid);if(me.char!=='charles'||!me.revealed||!s.lastTargets)return false;
+  const tg=s.lastTargets.filter(x=>P(s,x).alive);if(!tg.length)return false;
+  addLog(s,`🩸 ${me.name} (Charles) tự chịu 2 sát thương để đánh lại.`);damage(s,pid,2,null,false);
+  if(!me.alive){afterAction(s);return true;}
+  startAttack(s,pid,tg,{});afterAction(s);return true;
+};
+function startAttack(s,attId,targets,opts){
+  const att=P(s,attId);let a,b,diff;
+  if(hasEq(att,'masamune')){b=d4();a=null;diff=b;}else{a=d6();b=d4();diff=Math.abs(a-b);}
+  const bonus=atkBonus(att);const names=targets.map(x=>P(s,x).name).join(', ');
+  s.lastRoll={name:att.name,a,b,sum:diff,kind:opts.isCounter?'counter':'attack',target:names};
+  addLog(s,`${opts.isCounter?'🐺':'⚔️'} ${att.name} ${opts.isCounter?'phản đòn':'tấn công'} ${names}: ${a===null?'tung d4 = '+b:'tung '+a+' và '+b}${diff>0?` → ${diff} sát thương${bonus?` ${bonus>0?'+':''}${bonus} (trang bị)`:''}`:' → TRƯỢT'}.`);
+  s.atk={att:attId,targets,a,b,diff,bonus,spear:0,phase:'spear',idx:0,hits:[],counters:[],isCounter:!!opts.isCounter,after:opts.after||null};
+  resumeAttack(s);
+}
+function resumeAttack(s){
+  const k=s.atk;if(!k)return;const att=P(s,k.att);
+  if(s.phase!=='playing'){s.atk=null;return;}
+  if(k.phase==='spear'){
+    k.phase='bob';
+    if(k.diff>0&&hasEq(att,'spear')&&att.faction==='hunter'&&!k.isCounter){if(att.revealed)k.spear=2;else{s.pending={kind:'spear',actor:k.att};return;}}
+  }
+  if(k.phase==='bob'){
+    while(k.idx<k.targets.length){
+      const tid=k.targets[k.idx];const t=P(s,tid);if(!t.alive){k.idx++;continue;}
+      const dmg=k.diff>0?Math.max(0,k.diff+k.bonus+k.spear):0;
+      if(dmg>=2&&att.char==='bob'&&att.revealed&&!k.isCounter&&t.equip.length){s.pending={kind:'bob',actor:k.att,target:tid,dmg};return;}
+      if(dmg>0)k.hits.push({t:tid,dmg});k.idx++;
+    }
+    k.phase='apply';
+  }
+  if(k.phase==='apply'){
+    let any=false;
+    for(const h of k.hits){if(s.phase!=='playing')break;const t=P(s,h.t);const dealt=damage(s,h.t,h.dmg,k.att,true);if(dealt>0){any=true;addLog(s,`💥 ${t.name} chịu ${dealt} sát thương.`);}else if(!(s.guarded&&s.guarded[h.t]))addLog(s,`${t.name} không mất máu.`);}
+    if(!k.isCounter)k.targets.forEach(tid=>{const t=P(s,tid);if(t.alive&&t.char==='werewolf'&&t.revealed&&!k.counters.includes(tid))k.counters.push(tid);});
+    if(!k.hits.length&&k.diff>0)addLog(s,`💨 ${att.name} không gây được sát thương.`);
+    if(any&&att.char==='vampire'&&att.revealed&&att.alive){const hh=heal(s,k.att,2);addLog(s,`🩸 ${att.name} (Vampire) hút máu, hồi ${hh}.`);}
+    k.phase='loot';
+  }
+  if(s.phase!=='playing'){s.atk=null;return;}
+  if(k.phase==='loot'){if(processLoots(s))return;k.phase='counter';}
+  if(k.phase==='counter'){
+    const counters=k.counters.filter(w=>P(s,w).alive);
+    const after=k.after;s.atk=null;
+    if(!k.isCounter){s.attacked=true;s.lastTargets=k.targets;}
+    if(counters.length&&att.alive){queueCounter(s,counters,k.att);return;}
+    if(k.isCounter&&after&&after.length)queueCounter(s,after,k.targets[0]);
+  }
+}
+function queueCounter(s,list,attackerId){
+  list=[...list];
+  while(list.length){const w=list.shift();if(P(s,w).alive&&P(s,attackerId).alive){s.pending={kind:'counter',actor:w,attacker:attackerId,rest:list};return;}}
+}
+H.spearDecide=function(s,pid,yes){
+  if(!pend(s,pid,'spear')||!s.atk)return false;const me=P(s,pid);s.pending=null;
+  if(yes){me.revealed=true;s.atk.spear=2;addLog(s,`🔱 ${me.name} lộ diện: ${roleTitle(me)} — Giáo Longinus +2 sát thương.`);}
+  afterAction(s);return true;
+};
+H.bobDecide=function(s,pid,choice){
+  if(!pend(s,pid,'bob')||!s.atk)return false;const k=s.atk,me=P(s,pid),t=P(s,s.pending.target);
+  if(choice==='dmg'){k.hits.push({t:s.pending.target,dmg:s.pending.dmg});}
+  else{const i=Number(choice);if(!t.equip[i])return false;const g=t.equip.splice(i,1)[0];me.equip.push(g);addLog(s,`🎒 ${me.name} (Bob) cướp "${eqName(g)}" của ${t.name} thay vì gây sát thương.`);}
+  k.idx++;s.pending=null;afterAction(s);return true;
+};
+H.counterDecide=function(s,pid,yes){
+  if(!pend(s,pid,'counter'))return false;const {attacker,rest}=s.pending;s.pending=null;const me=P(s,pid);
+  if(yes&&P(s,attacker).alive)startAttack(s,pid,[attacker],{isCounter:true,after:rest});
+  else{addLog(s,`🐺 ${me.name} không phản đòn.`);queueCounter(s,rest||[],attacker);}
+  afterAction(s);return true;
+};
+H.lootPick=function(s,pid,i){
+  if(!pend(s,pid,'loot'))return false;const v=P(s,s.pending.victim),me=P(s,pid);if(!v.equip[i])return false;s.pending=null;
+  const g=v.equip.splice(i,1)[0];me.equip.push(g);addLog(s,`🎒 ${me.name} lấy "${eqName(g)}" của ${v.name}${v.equip.length?`, bỏ ${v.equip.map(eqName).join(', ')}`:''}.`);discardAll(s,v);s.lootQ.shift();
+  checkWin(s);afterAction(s);return true;
+};
+// --- kết thúc lượt ---
+H.endTurn=function(s,pid){
+  if(!turnStep(s,pid,'attack')||!s.attacked)return false;const me=P(s,pid);
+  if(s.extraTurns>0){s.extraTurns--;resetTurn(s);addLog(s,`🔁 ${me.name} chơi thêm 1 lượt${s.extraTurns?` (còn ${s.extraTurns} lượt thêm)`:''}.`);return true;}
+  advanceTurn(s);return true;
+};
+// --- xử lý mặc định / chủ phòng ---
+function forceDefault(s){
+  const p=s.pending;if(!p)return false;const a=pendingActor(s);const ap=P(s,a);
+  if(ap&&ap.alive){
+    switch(p.kind){
+      case 'spear':return H.spearDecide(s,a,false);
+      case 'bob':return H.bobDecide(s,a,'dmg');
+      case 'counter':return H.counterDecide(s,a,false);
+      case 'loot':return H.lootPick(s,a,0);
+      case 'hermitChoice':return H.hermitChoice(s,a,'dmg');
+      default:return forceSkip(s);
     }
   }
-  if(s.log.length>lastLogSeen){ pushToast(s.log.slice(lastLogSeen)); lastLogSeen=s.log.length; }
-}
-
-// ============ RENDER ============
-function render(){
-  const app=document.getElementById('app'), nameScreen=document.getElementById('nameScreen');
-  if(!myName){ nameScreen.style.display='block'; app.style.display='none'; setStatus(); return; }
-  nameScreen.style.display='none'; app.style.display='block';
-  if(!state){ app.innerHTML='<div class="card center muted">Đang đồng bộ...</div>'; return; }
-  const s=state;
-  if(s.phase==='playing'||s.phase==='ended') processEvents(s);
-
-  if(s.phase==='lobby'){ renderLobby(s,app); scheduleBots(); return; }
-  if(s.phase==='ended'){ renderEnded(s,app); return; }
-  renderPlaying(s,app);
-  scheduleBots();
-}
-function renderLobby(s,app){
-  const inLobby=!!s.players[myId], n=Object.keys(s.players).length;
-  const list=Object.entries(s.players).map(([id,p])=>`<div class="pill"><span>${p.name}${p.isBot?' 🤖':''}${id===myId?' <span class="tag tag-you">Bạn</span>':''}</span>${p.isBot?'<span class="muted" style="font-size:.68rem;">bot</span>':''}</div>`).join('');
-  const waitList=(s.waiting||[]).map(w=>`<div class="pill"><span>${w.name}</span><span class="muted">chờ</span></div>`).join('');
-  app.innerHTML=`<div class="card"><div class="center muted">Sảnh chờ · ${n}/8 người</div>
-    <div style="margin-top:10px;">${list||'<div class="muted center">Chưa có ai...</div>'}</div>
-    ${waitList?`<div class="muted" style="margin-top:8px;">Chờ ván sau:</div>${waitList}`:''}
-    ${inLobby?`
-      <div class="row" style="margin-top:8px;"><button class="btn-ghost" id="addBot" ${n>=8?'disabled':''} style="flex:1;">➕ Thêm Bot (test)</button><button class="btn-ghost" id="rmBot" style="flex:1;">➖ Bớt Bot</button></div>
-      <button class="btn-main" id="startBtn" ${n<2?'disabled':''}>${n<2?'Cần tối thiểu 2 người':'Bắt Đầu Ván'}</button>
-      <button class="btn-ghost" id="leaveBtn" style="width:100%;">Rời sảnh</button>`:`<div class="center muted" style="margin-top:8px;">Bạn đang trong hàng chờ.</div>`}</div>`;
-  const sb=document.getElementById('startBtn');if(sb)sb.onclick=startGame;
-  const lb=document.getElementById('leaveBtn');if(lb)lb.onclick=leaveLobby;
-  const ab=document.getElementById('addBot');if(ab)ab.onclick=addBot;
-  const rmb=document.getElementById('rmBot');if(rmb)rmb.onclick=removeBot;
-}
-function renderEnded(s,app){
-  const results=s.order.map(id=>{const p=s.players[id];const won=p.won===true;
-    return `<div class="pill" style="${won?'border:1px solid var(--gold);':'opacity:.7;'}">
-      <span>${won?'👑 ':''}${p.name}${id===myId?' (bạn)':''} ${p.alive?'':'💀'}</span>
-      <span style="display:flex;gap:8px;align-items:center;"><span class="tag tag-${p.faction}">${CHARACTERS[p.char]?CHARACTERS[p.char].name:factionLabel(p.faction)}</span>
-      <span style="font-size:.72rem;font-weight:800;color:${won?'#2ecc71':'#ff8f9a'};">${won?'THẮNG':'THUA'}</span></span></div>`;}).join('');
-  const banner=s.winner==='draw'?'🤝 HÒA':`🏆 PHE ${factionLabel(s.winner).toUpperCase()} THẮNG`;
-  const bg=s.winner==='draw'?'#555':`var(--${s.winner})`;
-  const iWon=s.players[myId]&&s.players[myId].won===true;
-  app.innerHTML=`<div class="card center"><div class="role-badge" style="background:${bg};color:#fff;">${banner}</div>
-    <div class="center" style="font-weight:800;margin-bottom:8px;color:${iWon?'#2ecc71':'#ff8f9a'};">${iWon?'🎉 Bạn THẮNG!':'Bạn thua ván này.'}</div>
-    ${results}<button class="btn-main" id="newRoundBtn" style="margin-top:10px;">Chơi Ván Mới</button></div>
-    <div class="card"><div class="log">${s.log.map(l=>`<div>${l}</div>`).join('')}</div></div>`;
-  document.getElementById('newRoundBtn').onclick=()=>{ if(acting)return;acting=true;let st=cur();const lobby=freshLobby();st.order.forEach(id=>lobby.players[id]={name:st.players[id].name});(st.waiting||[]).forEach(w=>{if(!lobby.players[w.id])lobby.players[w.id]={name:w.name};});pushLog(lobby,'Ván mới — bấm Bắt Đầu.');publishState(lobby);acting=false;render();};
-}
-function hpBadge(p,mine){ if(mine)return `<span style="font-size:.82rem;font-weight:700;">${p.hp}/${p.maxHp}</span>`; const lost=p.maxHp-p.hp; return `<span style="font-size:.78rem;color:${lost>0?'#ff8f9a':'var(--muted)'};">${p.alive?(lost>0?'-'+lost+' máu':'chưa mất máu'):'đã gục'}</span>`; }
-function arsenalStr(p){ return (p.arsenal&&p.arsenal.length)?p.arsenal.map(e=>EQUIP[e]?EQUIP[e].name:e).join(', '):'—'; }
-
-function renderPlaying(s,app){
-  const me=s.players[myId];
-  if(!me){ app.innerHTML=`<div class="card center"><div class="muted">Ván đang diễn ra. Bạn trong hàng chờ, sẽ vào sảnh khi ván kết thúc.</div></div><div class="card"><div class="log">${s.log.slice().reverse().map(l=>`<div>${l}</div>`).join('')}</div></div>`; return; }
-  const myTurn=turnId(s)===myId&&me.alive;
-  const c=CHARACTERS[me.char];
-
-  // Bảng người chơi
-  const roster=s.order.map(id=>{const p=s.players[id];const isT=turnId(s)===id&&p.alive;const mine=id===myId;
-    const who=p.revealed?roleTitle(p):'(ẩn danh)';
-    return `<div class="pill" style="${p.alive?'':'opacity:.45;'}"><span>${p.alive?'':'💀 '}${p.name}${mine?' (bạn)':''}${isT?' 🎯':''} <span class="muted" style="font-size:.68rem;">${p.revealed||mine?(mine?roleTitle(p):who):''}</span></span>${hpBadge(p,mine)}</div>`;}).join('');
-
-  // Bảng khu vực theo vùng
-  const zones=(s.zones||[]).map((z,zi)=>{
-    const inner=z.map(aid=>{
-      const here=s.order.filter(id=>s.players[id].alive&&s.players[id].area===aid).map(id=>{const p=s.players[id];return `<div class="pill" style="padding:5px 8px;"><span>${p.name}${id===myId?' (bạn)':''}</span>${hpBadge(p,id===myId)}</div>`;}).join('');
-      return `<div class="area-card ${me.area===aid?'here':''}"><div style="font-weight:600;font-size:.85rem;">${AREAS[aid].name} <span class="muted" style="font-size:.66rem;">(${AREAS[aid].nums.join('/')})</span></div>${here||'<div class="muted" style="font-size:.72rem;">(trống)</div>'}</div>`;
-    }).join('');
-    return `<div class="card" style="padding:10px;"><div class="zone-tag">VÙNG ${zi+1} (cùng tầm đánh)</div>${inner}</div>`;
-  }).join('');
-
-  // Điều khiển
-  let controls='';
-  if(!myTurn){ controls=`<div class="card center muted">Đang chờ <b>${s.players[turnId(s)].name}</b>...</div>`; }
-  else { controls=renderControls(s,me); }
-
-  // Nút lộ diện / năng lực
-  let powerBar='';
-  if(me.alive){
-    if(!me.revealed) powerBar=`<button class="btn-blue" id="revealBtn" style="width:100%;">👁️ Lộ diện (để dùng năng lực)</button>`;
-    else powerBar=renderPowerBar(s,me,myTurn);
+  // người phải quyết định đã chết/rời ván: gỡ quyết định, không gây hiệu ứng phụ
+  switch(p.kind){
+    case 'loot':{s.pending=null;discardAll(s,P(s,p.victim));if(s.lootQ&&s.lootQ.length)s.lootQ.shift();break;}
+    case 'counter':{s.pending=null;queueCounter(s,p.rest||[],p.attacker);break;}
+    case 'hermitChoice':{s.pending=null;s.hermitLast=Object.assign({},s.hermitLast||{},{n:s.seq,result:'Người nhận không còn trong ván.',waiting:false});break;}
+    case 'spear':case 'bob':{s.pending=null;s.atk=null;break;}
+    default:return forceSkip(s);
   }
-
-  const lr=s.lastRoll;
-  const rollCard=lr?`<div class="card center"><div class="muted" style="font-size:.72rem;">${lr.name} ${lr.kind==='attack'?'tấn công '+ (lr.target||''):'tung xúc xắc'}</div><div style="font-size:1.4rem;font-weight:800;">🎲 ${lr.d6} ${lr.kind==='attack'?'/':'+'} ${lr.d4} ${lr.kind==='attack'?'→ '+lr.sum+' dmg':'= '+lr.sum}</div></div>`:'';
-
-  app.innerHTML=`
-    <div class="card">
-      <div class="role-badge tag-${me.faction}" style="background:var(--${me.faction});color:#fff;">${c.name} · ${factionLabel(me.faction)}${me.revealed?' (đã lộ)':''}</div>
-      <div class="center muted" style="font-size:.76rem;">🎯 ${WINCOND[me.char]}</div>
-      <div class="center muted" style="font-size:.72rem;margin-top:2px;">⚡ ${c.power}</div>
-      <div class="center" style="margin-top:5px;">Máu: <b>${me.hp}</b>/${me.maxHp} · Trang bị: ${arsenalStr(me)}</div>
-      <div class="center muted" style="font-size:.74rem;margin-top:3px;">Vòng ${s.round} · Lượt: <b>${s.players[turnId(s)].name}</b>${myTurn?' (BẠN)':''}</div>
-    </div>
-    ${rollCard}
-    ${powerBar}
-    ${controls}
-    ${zones}
-    <div class="card"><div class="muted" style="margin-bottom:5px;">Nhật ký:</div><div class="log">${s.log.slice().reverse().map(l=>`<div>${l}</div>`).join('')}</div></div>
-    <div class="card"><div class="muted" style="margin-bottom:5px;">Người chơi:</div>${roster}</div>`;
-
-  wireControls(s,me);
+  afterAction(s);return true;
 }
+function forceSkip(s){
+  if(s.phase!=='playing')return false;
+  const name=P(s,TID(s))?P(s,TID(s)).name:'?';
+  s.pending=null;s.atk=null;
+  while(s.lootQ&&s.lootQ.length){const L=s.lootQ.shift();const k=P(s,L.killer),v=P(s,L.victim);if(k&&k.alive&&v.equip.length){k.equip.push(v.equip[0]);}discardAll(s,v);}
+  addLog(s,`⏭️ Bỏ lượt của ${name}.`);advanceTurn(s);return true;
+}
+H.hostSkip=function(s,pid){if(s.host!==pid||s.phase!=='playing')return false;return forceSkip(s);};
+H.hostKick=function(s,pid,t){
+  if(s.host!==pid||s.phase!=='playing'||!P(s,t)||t===pid)return false;const p=P(s,t);
+  p.left=true;p.alive=false;p.revealed=true;discardAll(s,p);if(s.guarded)delete s.guarded[t];
+  addLog(s,`🚪 ${p.name} bị loại khỏi ván (không tính là chết).`);
+  const refs=q=>!!q&&(q.target===t||q.victim===t||q.attacker===t||q.from===t||(q.targets&&q.targets.includes(t))||(q.rest&&q.rest.includes(t)));
+  if(s.pending&&pendingActor(s)===t&&['counter','hermitChoice','loot'].includes(s.pending.kind))forceDefault(s);
+  if(s.phase==='playing'&&(TID(s)===t||refs(s.pending)||(s.atk&&(s.atk.att===t||s.atk.targets.includes(t)))))forceSkip(s);else afterAction(s);
+  return true;
+};
+H.newGame=function(s,pid){if(s.phase!=='ended')return false;const l=newLobbyFrom(s);Object.assign(s,l);Object.keys(s).forEach(k=>{if(!(k in l))delete s[k];});return true;};
+H.startGame=function(s,pid){if(s.phase!=='lobby'||!s.players[pid])return false;return startGame(s);};
+// Bọc cho giao diện: UI.x(...) = hành động của chính mình
+const UI={};Object.keys(H).forEach(k=>{UI[k]=(...a)=>act(s=>H[k](s,myId,...a));});
 
-function renderControls(s,me){
+// ================= BOT (để test) =================
+function botAct(s,id){
+  const me=P(s,id);if(!me||!me.alive||s.phase!=='playing')return false;
   const p=s.pending;
   if(p){
-    if(p.kind==='chooseArea'){ return targetAreasHtml(s,'chooseArea','Chọn khu để di chuyển:', AREA_IDS.filter(a=>a!==me.area)); }
-    if(p.kind==='gateDeck'){ return `<div class="card"><div class="muted" style="margin-bottom:6px;">Cổng Địa Ngục — chọn bộ bài để rút:</div><div class="row"><button class="btn-ghost" onclick="gatePick('white')">⬜ Trắng</button><button class="btn-ghost" onclick="gatePick('black')">⬛ Đen</button><button class="btn-heal" onclick="gatePick('hermit')">🟢 Ẩn Sĩ</button></div></div>`; }
-    if(p.kind==='hermitTarget'){ return targetPlayersHtml(s,'hermitGive','🟢 Đưa thẻ Ẩn Sĩ cho (nội dung chỉ 2 người thấy):', s.order.filter(id=>id!==myId&&s.players[id].alive)); }
-    if(p.kind==='woods'){ const alive=s.order.filter(id=>s.players[id].alive); return `<div class="card"><div class="muted" style="margin-bottom:6px;">🌲 Rừng Quái Dị:</div><div style="font-size:.78rem;margin-bottom:4px;">Gây 2 sát thương:</div><div class="row">${alive.map(id=>`<button class="btn-target" onclick="woodsDo('${id}','dmg')">${s.players[id].name}</button>`).join('')}</div><div style="font-size:.78rem;margin:6px 0 4px;">Hồi 1 máu:</div><div class="row">${alive.map(id=>`<button class="btn-heal" onclick="woodsDo('${id}','heal')">${s.players[id].name}</button>`).join('')}</div></div>`; }
-    if(p.kind==='altarTarget'){ const tg=s.order.filter(id=>id!==myId&&s.players[id].alive&&s.players[id].arsenal.length); return tg.length?targetPlayersHtml(s,'altarSteal','🏛️ Cướp trang bị của:',tg):`<div class="card"><div class="muted">Không ai có trang bị để cướp.</div><button class="btn-ghost" onclick="skipArea()" style="width:100%;">Bỏ qua</button></div>`; }
-    if(p.kind==='cardTarget'){ const need=p.need; let tg=s.order.filter(id=>s.players[id].alive&&(need==='other'?id!==myId:true)); return targetPlayersHtml(s,'cardTarget','Chọn mục tiêu cho thẻ:',tg); }
-    if(p.kind==='bobChoice'){ return `<div class="card"><div class="muted" style="margin-bottom:6px;">Bob — chọn:</div><div class="row"><button class="btn-target" onclick="bobChoice('dmg')">Gây sát thương (${p.dmg})</button><button class="btn-heal" onclick="bobChoice('steal')">🎒 Cướp trang bị</button></div></div>`; }
-    if(p.kind==='powerTarget'){ return targetPlayersHtml(s,'powerTarget','✨ Chọn mục tiêu năng lực:',s.order.filter(id=>s.players[id].alive)); }
+    if(pendingActor(s)!==id)return false;
+    const o=othersAlive(s,id);
+    switch(p.kind){
+      case 'chooseRoll':{const i=p.rolls.findIndex(r=>r.sum!==7&&numToArea(r.sum)!==me.area);return H.chooseRoll(s,id,i>=0?i:0);}
+      case 'chooseArea':return H.chooseArea(s,id,pick(AREA_IDS.filter(a=>a!==me.area)));
+      case 'gateDeck':return H.gatePick(s,id,pick(['white','black','hermit']));
+      case 'hermitGive':return o.length?H.hermitGive(s,id,pick(o)):forceSkip(s);
+      case 'hermitChoice':return (me.equip.length&&Math.random()<0.5)?H.hermitChoice(s,id,0):H.hermitChoice(s,id,'dmg');
+      case 'cardTarget':{const tg=p.targets.filter(x=>x!==id);return H.cardTarget(s,id,p.card==='firstaid'?pick(p.targets):(tg.length?pick(tg):p.targets[0]));}
+      case 'bananaItem':return H.bananaItem(s,id,0);
+      case 'bananaTarget':return H.bananaTarget(s,id,pick(p.targets));
+      case 'stealTarget':return H.stealTarget(s,id,pick(p.targets));
+      case 'stealItem':return H.stealItem(s,id,0);
+      case 'optReveal':return H.optReveal(s,id,true);
+      case 'woods':{const tg=p.targets.filter(x=>x!==id);return (tg.length&&Math.random()<0.6)?H.woodsDo(s,id,pick(tg),'dmg'):H.woodsDo(s,id,id,'heal');}
+      case 'powerTarget':return H.powerTarget(s,id,pick(p.targets));
+      case 'spear':return H.spearDecide(s,id,true);
+      case 'bob':return H.bobDecide(s,id,Math.random()<0.5?0:'dmg');
+      case 'counter':return H.counterDecide(s,id,Math.random()<0.8);
+      case 'loot':return H.lootPick(s,id,0);
+      default:return false;
+    }
+  }
+  if(TID(s)!==id)return false;
+  switch(s.step){
+    case 'move':
+      if(!me.revealed&&me.char!=='daniel'&&Math.random()<0.2)return H.reveal(s,id);
+      if(me.revealed&&!me.usedPower){
+        if(me.char==='allie'&&me.hp<=me.maxHp/2)return H.usePower(s,id);
+        if((me.char==='franklin'||me.char==='george')&&Math.random()<0.6&&othersAlive(s,id).length)return H.usePower(s,id);
+      }
+      if(me.char==='emi'&&me.revealed&&me.area&&Math.random()<0.3){const op=emiOptions(s,id);if(op.length)return H.emiMove(s,id,pick(op));}
+      return H.rollMove(s,id);
+    case 'area':return Math.random()<0.85?H.doArea(s,id):H.skipArea(s,id);
+    case 'attack':
+      if(!s.attacked){const tg=attackTargets(s,id);if(tg.length&&(hasEq(me,'masamune')||Math.random()<0.6))return H.attackTarget(s,id,pick(tg));return H.noAttack(s,id);}
+      if(me.char==='charles'&&me.revealed&&s.lastTargets&&me.hp>4&&Math.random()<0.3&&s.lastTargets.some(x=>P(s,x).alive))return H.charlesAgain(s,id);
+      if(me.char==='wight'&&me.revealed&&!me.usedPower&&s.deathOrder.length)return H.wightUse(s,id);
+      return H.endTurn(s,id);
+  }
+  return false;
+}
+let botKey=null,wdKey=null,deadKey=null;
+function scheduleBots(){
+  const s=state;if(!s||s.phase!=='playing')return;
+  if(controllerId(s)!==myId)return;
+  const id=pendingActor(s);const p=s.players[id];if(!p||!p.isBot||!p.alive)return;
+  if(botKey===s.seq)return;botKey=s.seq;
+  setTimeout(()=>{const st=state;if(!st||st.phase!=='playing'||st.seq!==botKey||pendingActor(st)!==id)return;const ss=cur();let ok=false;try{ok=botAct(ss,id);}catch(e){console.error('bot',e);}if(!ok){addLog(ss,`🤖 ${ss.players[id].name} không hành động được, bỏ lượt.`);forceSkip(ss);}commit(ss);},900);
+}
+// Người khác không phản hồi quá lâu → xử lý mặc định (chỉ với quyết định ngoài lượt)
+function watchdog(){
+  const s=state;if(!s||s.phase!=='playing'||!s.pending)return;
+  const actor=pendingActor(s);const ap=s.players[actor];if(!ap||ap.isBot||actor===myId||actor===TID(s))return;
+  const tid=TID(s),tp=s.players[tid];
+  const iRun=(tid===myId)||(tp&&tp.isBot&&controllerId(s)===myId)||(s.host===myId);
+  if(!iRun||wdKey===s.seq)return;wdKey=s.seq;
+  setTimeout(()=>{const st=state;if(!st||st.phase!=='playing'||st.seq!==wdKey||!st.pending)return;const ss=cur();addLog(ss,`⏱️ ${ss.players[pendingActor(ss)].name} không phản hồi, xử lý mặc định.`);forceDefault(ss);commit(ss);},45000);
+}
+// Người tới lượt đã chết/rời mà không ai xử lý → chủ phòng tự chuyển lượt
+function deadTurnFix(){
+  const s=state;if(!s||s.phase!=='playing'||s.pending||s.atk)return;const tp=s.players[TID(s)];if(!tp||tp.alive)return;
+  if(controllerId(s)!==myId||deadKey===s.seq)return;deadKey=s.seq;
+  setTimeout(()=>{const st=state;if(!st||st.phase!=='playing'||st.seq!==deadKey)return;const ss=cur();afterAction(ss);commit(ss);},1200);
+}
+
+// ================= HIỂN THỊ =================
+let lastSeenSeq=null,lastHermitN=0;
+function pushToast(html,cls){const stack=$('toastStack');if(!stack)return;const el=document.createElement('div');el.className='toast'+(cls?' '+cls:'');el.innerHTML=html;const rm=()=>{if(el.parentNode){el.style.transition='opacity .25s';el.style.opacity='0';setTimeout(()=>el.remove(),250);}};el.onclick=rm;stack.appendChild(el);while(stack.children.length>4)stack.firstChild.remove();setTimeout(rm,cls==='green'?20000:9000);}
+function processEvents(s){
+  const seq=s.seq||0;
+  if(lastSeenSeq===null||seq<lastSeenSeq){lastSeenSeq=seq;lastHermitN=s.hermitLast?s.hermitLast.n:0;return;}
+  const news=s.log.filter(e=>e.n>lastSeenSeq);
+  if(news.length)pushToast(news.map(e=>`<div>${esc(e.t)}</div>`).join(''));
+  const h=s.hermitLast;
+  if(h&&h.n>lastHermitN){lastHermitN=h.n;if(h.by===myId||h.to===myId)pushToast(`<b>🟢 Thẻ Ẩn Sĩ "${esc(HERMIT[h.cid].name)}"</b><div>${esc(hermitText(h.cid))}</div><div>${esc(h.result)}</div>${h.secret&&h.by===myId?`<div><b>${esc(h.secret)}</b></div>`:''}<div class="muted small">Xem lại ở khung màu xanh bên dưới.</div>`,'green');}
+  lastSeenSeq=seq;
+}
+function render(){
+  if(!IS_BROWSER)return;
+  const app=$('app'),ns=$('nameScreen');if(!app)return;
+  if(!joined){ns.style.display='block';app.style.display='none';setStatus();return;}
+  ns.style.display='none';app.style.display='block';setStatus();
+  if(!state){app.innerHTML='<div class="card center muted">Đang đồng bộ phòng…</div>';return;}
+  const s=state;
+  if(s.phase==='lobby')lastSeenSeq=s.seq||0;else processEvents(s);
+  if(s.phase==='lobby')renderLobby(s,app);else if(s.phase==='ended')renderEnded(s,app);else renderPlaying(s,app);
+  scheduleBots();watchdog();deadTurnFix();
+}
+function logHtml(s){return s.log.slice().reverse().map(e=>`<div>${esc(e.t)}</div>`).join('');}
+function topBar(){return `<div class="between" style="margin-bottom:6px;"><span class="muted small">Phòng <b>${esc(room)}</b></span><span><button class="btn-ghost btn-sm" onclick="copyLink()">🔗 Link</button><button class="btn-ghost btn-sm" onclick="openRules()">📖 Luật và thẻ</button></span></div>`;}
+function renderLobby(s,app){
+  const inLobby=!!s.players[myId],n=Object.keys(s.players).length,host=isHost(s);
+  const list=Object.entries(s.players).map(([id,p])=>`<div class="pill"><span>${esc(p.name)}${p.isBot?' 🤖':''}${s.host===id?' 👑':''}${id===myId?' <span class="tag tag-you">Bạn</span>':''}</span>${host&&id!==myId?`<button class="btn-ghost btn-sm" onclick="kickLobby('${id}')">✕</button>`:''}</div>`).join('');
+  const waitList=(s.waiting||[]).map(w=>`<div class="pill"><span>${esc(w.name)}</span><span class="muted">chờ ván sau</span></div>`).join('');
+  app.innerHTML=`${topBar()}<div class="card">
+    <div class="muted" style="margin:0 0 8px;">Sảnh chờ · ${n}/8 người (cần 4–8). Chủ phòng 👑 có thể xóa người không còn online.</div>
+    ${list||'<div class="muted center">Chưa có ai…</div>'}
+    ${waitList?`<div class="muted" style="margin-top:8px;">Hàng chờ:</div>${waitList}`:''}
+    ${inLobby?`<div class="row" style="margin-top:8px;"><button class="btn-ghost" onclick="addBot()" ${n>=8?'disabled':''} style="flex:1;">➕ Thêm bot</button><button class="btn-ghost" onclick="removeBot()" style="flex:1;">➖ Bớt bot</button></div>
+      <button class="btn-main" onclick="UI.startGame()" ${n<4||n>8?'disabled':''}>${n<4?`Cần thêm ${4-n} người để bắt đầu`:'Bắt đầu ván'}</button>
+      <button class="btn-ghost" onclick="leaveRoom()" style="width:100%;">Rời phòng</button>`:`<div class="center muted" style="margin-top:8px;">Bạn đang trong hàng chờ.</div>`}
+    <div class="row" style="margin-top:6px;">${host?'':`<button class="btn-ghost btn-sm" onclick="claimHost()">👑 Tôi làm chủ phòng</button>`}<button class="btn-ghost btn-sm" onclick="resetRoom()">Đặt lại phòng</button></div>
+  </div><div class="card"><div class="log">${logHtml(s)}</div></div>`;
+}
+function renderEnded(s,app){
+  const results=s.order.map(id=>{const p=s.players[id];const won=p.won===true;return `<div class="pill" style="${won?'border:1px solid var(--gold);':'opacity:.7;'}"><span>${won?'👑 ':''}${esc(p.name)}${id===myId?' (bạn)':''}${p.alive?'':' 💀'} <span class="tag tag-${p.faction}">${roleTitle(p)}</span></span><span class="small" style="font-weight:800;color:${won?'var(--green)':'#ff8f9a'};">${won?'THẮNG':'THUA'}</span></div>`;}).join('');
+  const banner=s.winner==='draw'?'🤝 HÒA':s.winner==='neutral'?'🏆 TRUNG LẬP ĐẠT ĐIỀU KIỆN':`🏆 PHE ${factionLabel(s.winner).toUpperCase()} THẮNG`;
+  const bg=s.winner==='draw'?'#555':`var(--${s.winner})`;
+  const mine=s.players[myId];const iWon=mine&&mine.won===true;
+  app.innerHTML=`${topBar()}<div class="card center"><div class="role-badge" style="background:${bg};">${banner}</div><div style="font-weight:800;margin-bottom:8px;color:${iWon?'var(--green)':'#ff8f9a'};">${mine?(iWon?'🎉 Bạn thắng!':'Bạn thua ván này.'):'Ván đã kết thúc.'}</div>${results}<button class="btn-main" onclick="UI.newGame()" style="margin-top:10px;">Chơi ván mới</button></div><div class="card"><div class="log">${logHtml(s)}</div></div>`;
+}
+function dmgBadge(p){if(!p.alive)return `<span class="muted small">${p.left?'đã rời':'đã gục'}</span>`;const lost=p.maxHp-p.hp;return `<span class="small" style="color:${lost>0?'#ff8f9a':'var(--muted)'};">${lost>0?'−'+lost+' máu':'nguyên máu'}</span>`;}
+function chips(p){return p.equip.length?p.equip.map(c=>`<span class="chip" onclick="showCard('${c}')">${esc(eqName(c))}</span>`).join(''):'<span class="muted small">không có trang bị</span>';}
+function waitLabel(s){const p=s.pending;if(!p)return s.step==='move'?'di chuyển':s.step==='area'?'hành động khu':'tấn công hoặc kết thúc lượt';return {hermitChoice:'quyết định thẻ Ẩn Sĩ (đưa đồ hay chịu 1 máu)',counter:'cân nhắc phản đòn (Werewolf)',loot:'chọn trang bị lượm',bob:'Bob chọn cướp đồ hay đánh',spear:'quyết định lộ diện (Giáo Longinus)',hermitGive:'chọn người nhận thẻ Ẩn Sĩ',chooseArea:'chọn khu (tung 7)',chooseRoll:'chọn kết quả La Bàn',gateDeck:'chọn bộ bài ở Cổng Địa Ngục',woods:'chọn ở Rừng Quái Dị',stealTarget:'chọn người để cướp đồ',stealItem:'chọn trang bị để cướp',bananaItem:'chọn trang bị để đưa (Vỏ Chuối)',bananaTarget:'chọn người nhận (Vỏ Chuối)',optReveal:'quyết định lộ diện',cardTarget:'chọn mục tiêu thẻ',powerTarget:'chọn mục tiêu năng lực'}[p.kind]||'hành động';}
+function areaActionLabel(area){return {church:'⬜ Rút thẻ Trắng',cemetery:'⬛ Rút thẻ Đen',hermit:'🟢 Rút thẻ Ẩn Sĩ',gate:'🔮 Chọn bộ bài để rút',woods:'🌲 Hại hoặc hồi máu',altar:'🏛️ Cướp trang bị'}[area]||'Hành động khu';}
+function boxCard(label,inner){return `<div class="card"><div class="muted small" style="margin-bottom:4px;">${label}</div><div class="row">${inner}</div></div>`;}
+function renderPlaying(s,app){
+  const me=s.players[myId];
+  if(!me){app.innerHTML=`${topBar()}<div class="card center muted">Ván đang diễn ra. Bạn trong hàng chờ, sẽ vào sảnh khi ván kết thúc.</div><div class="card"><div class="log">${logHtml(s)}</div></div>`;return;}
+  const c=CHARACTERS[me.char],tid=TID(s),myTurn=tid===myId&&me.alive;
+  let global='';
+  if(me.alive){
+    if(!me.revealed&&me.char!=='daniel')global+=`<button class="btn-blue" onclick="UI.reveal()" style="width:100%;margin-top:6px;">👁️ Lộ diện (để dùng năng lực)</button>`;
+    if(me.char==='allie'&&me.revealed&&!me.usedPower)global+=`<button class="btn-heal" onclick="UI.usePower()" style="width:100%;margin-top:6px;">✨ Tình mẫu tử: hồi đầy máu</button>`;
+  }
+  const myCard=`<div class="card ${myTurn?'turn':''}">
+    <div class="role-badge" style="background:var(--${me.faction});">${c.name} · ${factionLabel(me.faction)}${me.revealed?' (đã lộ diện)':' (ẩn danh)'}${me.alive?'':' 💀'}</div>
+    <div class="small">🎯 Thắng: ${WINCOND[me.char]}</div>
+    <div class="small muted" style="margin-top:2px;">⚡ ${c.power}${me.usedPower?' <b>(đã dùng)</b>':''}</div>
+    <div class="hpbar"><i style="width:${Math.round(me.hp/me.maxHp*100)}%"></i></div>
+    <div class="between small"><span>Máu <b>${me.hp}</b>/${me.maxHp}</span><span>Vòng ${s.round} · lượt của <b>${esc(s.players[tid].name)}</b>${myTurn?' (bạn)':''}${s.extraTurns?` · còn ${s.extraTurns} lượt thêm`:''}</span></div>
+    <div style="margin-top:6px;">${chips(me)} <span class="muted small">(chạm để xem tác dụng)</span></div>${global}</div>`;
+  const h=s.hermitLast;let hermitPanel='';
+  if(h&&(h.by===myId||h.to===myId)&&!(s.pending&&s.pending.kind==='hermitChoice'&&pendingActor(s)===myId)){const other=s.players[h.by===myId?h.to:h.by];hermitPanel=`<div class="card private"><div class="between"><b>🟢 Thẻ Ẩn Sĩ "${esc(HERMIT[h.cid].name)}"</b><span class="small muted">chỉ 2 người thấy</span></div><div class="small" style="margin-top:4px;">${h.by===myId?`Bạn đưa cho <b>${esc(other.name)}</b>.`:`<b>${esc(other.name)}</b> đưa cho bạn.`}</div><div class="cardbox">${esc(hermitText(h.cid))}</div><div class="small">Kết quả: ${esc(h.result)}</div>${h.secret&&h.by===myId?`<div class="small" style="margin-top:4px;"><b>🔮 ${esc(h.secret)}</b></div>`:''}</div>`;}
+  const lr=s.lastRoll;let rollCard='';
+  if(lr){let body;if(lr.kind==='move'||lr.kind==='dynamite')body=`🎲 ${lr.a} + ${lr.b} = ${lr.sum}`;else if(lr.kind==='attack'||lr.kind==='counter')body=`🎲 ${lr.a===null?'d4 = '+lr.b:lr.a+' / '+lr.b} → ${lr.sum>0?lr.sum+' sát thương cơ bản':'trượt'}`;else body=`🎲 ${lr.sum}`;
+    const what=lr.kind==='attack'?'tấn công '+esc(lr.target||''):lr.kind==='counter'?'phản đòn '+esc(lr.target||''):lr.kind==='dynamite'?'tung Thuốc Nổ':lr.kind==='power'?'dùng năng lực':'tung xúc xắc';
+    rollCard=`<div class="card center"><div class="muted small">${esc(lr.name)} ${what}</div><div style="font-size:1.3rem;font-weight:800;">${body}</div></div>`;}
+  let controls='';
+  if(!me.alive)controls=`<div class="card center muted">💀 Bạn đã gục. Vẫn có thể thắng nếu phe hoặc điều kiện của bạn đạt được.</div>`;
+  else if(canAct(s,myId))controls=renderControls(s,me);
+  else controls=`<div class="card center muted">⏳ Đang chờ <b>${esc(s.players[pendingActor(s)].name)}</b>: ${waitLabel(s)}</div>`;
+  const zones=s.zones.map((z,zi)=>`<div class="card" style="padding:10px;"><div class="zone-tag">Cặp ${zi+1} — cùng tầm đánh</div>${z.map(aid=>{const here=aliveIds(s).filter(id=>s.players[id].area===aid);return `<div class="area-card ${me.area===aid?'here':''}"><div class="between"><b class="small">${AREAS[aid].name}</b><span class="muted small">${AREAS[aid].nums.join('/')}</span></div>${here.length?here.map(id=>{const p=s.players[id];return `<div class="small" style="margin-top:3px;">${esc(p.name)}${id===myId?' (bạn)':''}${tid===id?' 🎯':''} ${dmgBadge(p)}<div>${chips(p)}</div></div>`;}).join(''):'<div class="muted small">(trống)</div>'}</div>`;}).join('')}</div>`).join('');
+  const roster=s.order.map(id=>{const p=s.players[id];const mine=id===myId;return `<div class="pill ${p.alive?'':'dead'}"><div><div>${p.alive?'':'💀 '}${esc(p.name)}${mine?' <span class="tag tag-you">Bạn</span>':''}${tid===id&&p.alive?' 🎯':''}${s.host===id?' 👑':''} ${p.revealed||mine?`<span class="tag tag-${p.faction}">${roleTitle(p)}</span>`:'<span class="muted small">(ẩn danh)</span>'}</div><div style="margin-top:3px;">${chips(p)}</div></div><div style="text-align:right;white-space:nowrap;">${mine?`<b class="small">${p.hp}/${p.maxHp}</b>`:dmgBadge(p)}</div></div>`;}).join('');
+  let hostTools='';
+  if(isHost(s))hostTools=`<div class="card"><div class="muted small" style="margin-bottom:4px;">👑 Công cụ chủ phòng (khi có người mất kết nối):</div><div class="row"><button class="btn-ghost btn-sm" onclick="confirmSkip()">⏭️ Bỏ lượt của ${esc(s.players[tid].name)}</button>${s.order.filter(id=>id!==myId&&s.players[id].alive).map(id=>`<button class="btn-ghost btn-sm" onclick="confirmKick('${id}')">🚪 Loại ${esc(s.players[id].name)}</button>`).join('')}<button class="btn-ghost btn-sm" onclick="resetRoom()">Đặt lại phòng</button></div></div>`;
+  else hostTools=`<div class="center"><button class="btn-ghost btn-sm" onclick="claimHost()">👑 Chủ phòng mất kết nối? Tôi làm chủ phòng</button></div>`;
+  app.innerHTML=`${topBar()}${myCard}${hermitPanel}${controls}${rollCard}${zones}<div class="card"><div class="muted" style="margin-bottom:5px;">Người chơi</div>${roster}</div><div class="card"><div class="muted" style="margin-bottom:5px;">Nhật ký</div><div class="log">${logHtml(s)}</div></div>${hostTools}`;
+}
+function renderControls(s,me){
+  const p=s.pending;const btn=(cls,fn,label,dis)=>`<button class="${cls}" onclick="${fn}" ${dis?'disabled':''}>${label}</button>`;const pl=id=>esc(s.players[id].name);
+  if(p){
+    switch(p.kind){
+      case 'chooseRoll':return boxCard('🧭 La Bàn — chọn 1 kết quả:',p.rolls.map((r,i)=>btn('btn-gold',`UI.chooseRoll(${i})`,`${r.a}+${r.b}=${r.sum} → ${r.sum===7?'chọn khu bất kỳ':AREAS[numToArea(r.sum)].name}${r.sum!==7&&numToArea(r.sum)===me.area?' (trùng, sẽ tung lại)':''}`)).join(''));
+      case 'chooseArea':return boxCard('Tung được 7 — chọn khu để tới:',AREA_IDS.filter(a=>a!==me.area).map(a=>btn('btn-ghost',`UI.chooseArea('${a}')`,AREAS[a].name)).join(''));
+      case 'gateDeck':return boxCard('🔮 Cổng Địa Ngục — chọn bộ bài:',btn('btn-ghost',"UI.gatePick('white')",'⬜ Trắng')+btn('btn-ghost',"UI.gatePick('black')",'⬛ Đen')+btn('btn-heal',"UI.gatePick('hermit')",'🟢 Ẩn Sĩ'));
+      case 'hermitGive':return `<div class="card private"><b>🟢 Thẻ Ẩn Sĩ "${esc(HERMIT[p.card].name)}"</b><div class="cardbox">${esc(hermitText(p.card))}</div><div class="muted small" style="margin-bottom:4px;">Chỉ bạn và người nhận biết nội dung. Đưa cho:</div><div class="row">${othersAlive(s,myId).map(id=>btn('btn-target',`UI.hermitGive('${id}')`,pl(id))).join('')}</div></div>`;
+      case 'hermitChoice':return `<div class="card private"><b>🟢 ${pl(p.from)} đưa bạn thẻ Ẩn Sĩ "${esc(HERMIT[p.card].name)}"</b><div class="cardbox">${esc(hermitText(p.card))}</div><div class="small" style="margin-bottom:4px;">Bạn trúng điều kiện. Chọn:</div><div class="row">${me.equip.map((c,i)=>btn('btn-ghost',`UI.hermitChoice(${i})`,`Đưa "${esc(eqName(c))}"`)).join('')}${btn('btn-target',"UI.hermitChoice('dmg')",'Chịu 1 sát thương')}</div></div>`;
+      case 'cardTarget':{const lbl={blessing:'⬜ Ban Phước — chọn người để hồi máu (tung d6):',firstaid:'⬜ Sơ Cứu — đặt sát thương của ai về 7:',spider:'⬛ Nhện Khát Máu — gây 2 sát thương cho ai (bạn tự chịu 2):',doll:'⬛ Búp Bê Nguyền — chọn mục tiêu (tung d6: 1–4 họ −3, 5–6 bạn −3):',bat:'⬛ Dơi Hút Máu — gây 2 sát thương cho ai (bạn hồi 1):'}[p.card]||'Chọn mục tiêu:';return boxCard(lbl,p.targets.map(id=>btn(id===myId?'btn-ghost':'btn-target',`UI.cardTarget('${id}')`,pl(id)+(id===myId?' (bạn)':''))).join(''));}
+      case 'bananaItem':return boxCard('⬛ Vỏ Chuối — chọn trang bị để đưa đi:',me.equip.map((c,i)=>btn('btn-ghost',`UI.bananaItem(${i})`,esc(eqName(c)))).join(''));
+      case 'bananaTarget':return boxCard(`⬛ Vỏ Chuối — đưa "${esc(eqName(p.item))}" cho:`,p.targets.map(id=>btn('btn-target',`UI.bananaTarget('${id}')`,pl(id))).join(''));
+      case 'stealTarget':return boxCard(`${p.src==='altar'?'🏛️ Bàn Thờ Cổ':'⬛ Yêu Tinh Nghịch'} — cướp trang bị của:`,p.targets.map(id=>btn('btn-target',`UI.stealTarget('${id}')`,pl(id)+' ('+s.players[id].equip.length+' món)')).join(''));
+      case 'stealItem':return boxCard(`Chọn trang bị của ${pl(p.target)} để cướp:`,s.players[p.target].equip.map((c,i)=>btn('btn-ghost',`UI.stealItem(${i})`,esc(eqName(c)))).join(''));
+      case 'optReveal':return boxCard(`${esc(CARDS[p.card].name)}: lộ diện để hồi đầy máu?`,btn('btn-heal','UI.optReveal(true)','👁️ Lộ diện và hồi đầy máu')+btn('btn-ghost','UI.optReveal(false)','Không lộ'));
+      case 'woods':return `<div class="card"><div class="muted small" style="margin-bottom:4px;">🌲 Rừng Quái Dị — gây 2 sát thương cho:</div><div class="row">${p.targets.filter(id=>id!==myId).map(id=>btn('btn-target',`UI.woodsDo('${id}','dmg')`,pl(id))).join('')}</div><div class="muted small" style="margin:6px 0 4px;">Hoặc hồi 1 máu cho:</div><div class="row">${p.targets.map(id=>btn('btn-heal',`UI.woodsDo('${id}','heal')`,pl(id)+(id===myId?' (bạn)':''))).join('')}</div></div>`;
+      case 'powerTarget':return boxCard(`⚡ ${CHARACTERS[me.char].name} — chọn mục tiêu (tung ${me.char==='franklin'?'d6':'d4'}):`,p.targets.map(id=>btn('btn-target',`UI.powerTarget('${id}')`,pl(id))).join(''));
+      case 'spear':return boxCard('🔱 Giáo Longinus: đòn trúng! Lộ diện để +2 sát thương?',btn('btn-heal','UI.spearDecide(true)','👁️ Lộ diện, +2 sát thương')+btn('btn-ghost','UI.spearDecide(false)','Không'));
+      case 'bob':return boxCard(`🎒 Bob: đòn sẽ gây ${p.dmg} sát thương cho ${pl(p.target)}. Cướp 1 trang bị thay vì đánh?`,s.players[p.target].equip.map((c,i)=>btn('btn-heal',`UI.bobDecide(${i})`,`Cướp "${esc(eqName(c))}"`)).join('')+btn('btn-target',"UI.bobDecide('dmg')",`Gây ${p.dmg} sát thương`));
+      case 'counter':return boxCard(`🐺 Bạn bị ${pl(p.attacker)} tấn công. Phản đòn?`,btn('btn-target','UI.counterDecide(true)','🐺 Phản đòn ngay')+btn('btn-ghost','UI.counterDecide(false)','Không'));
+      case 'loot':return boxCard(`🎒 Bạn hạ gục ${pl(p.victim)} — chọn 1 trang bị để lấy (số còn lại bị bỏ):`,s.players[p.victim].equip.map((c,i)=>btn('btn-heal',`UI.lootPick(${i})`,esc(eqName(c)))).join(''));
+    }
     return '';
   }
-  // Không có pending -> theo bước
+  const steps=`<div class="steps"><span class="${s.step==='move'?'on':'done'}">1 · Di chuyển</span><span class="${s.step==='area'?'on':s.step==='attack'?'done':''}">2 · Khu vực</span><span class="${s.step==='attack'?'on':''}">3 · Tấn công</span></div>`;
   if(s.step==='move'){
-    let extra='';
-    if(me.char==='emi'&&me.revealed){ extra=`<div class="muted" style="margin:8px 0 4px;">Hoặc dùng năng lực Emi — đi thẳng tới:</div><div class="row">${AREA_IDS.filter(a=>a!==me.area).map(a=>`<button class="btn-ghost" onclick="emiMove('${a}')">${AREAS[a].name}</button>`).join('')}</div>`; }
-    return `<div class="card"><button class="btn-gold" id="rollBtn" style="font-size:1.05rem;">🎲 Tung Xúc Xắc Di Chuyển</button>${extra}</div>`;
+    let html=steps;
+    if((me.char==='franklin'||me.char==='george')&&me.revealed&&!me.usedPower)html+=btn('btn-heal','UI.usePower()',`⚡ Dùng năng lực trước khi đi (${me.char==='franklin'?'d6':'d4'} sát thương)`);
+    html+=`<button class="btn-gold" onclick="UI.rollMove()" style="font-size:1.05rem;">🎲 Tung xúc xắc di chuyển${hasEq(me,'compass')?' (La Bàn: tung 2 lần)':''}</button>`;
+    if(me.char==='emi'&&me.revealed&&me.area){const op=emiOptions(s,myId);html+=`<div class="muted small" style="margin:6px 0 2px;">Hoặc Emi dịch chuyển tới:</div><div class="row">${op.map(a=>btn('btn-ghost',`UI.emiMove('${a}')`,AREAS[a].name)).join('')}</div>`;}
+    return `<div class="card">${html}</div>`;
   }
-  if(s.step==='action'){
-    let html='<div class="card">';
-    if(!s.didAction){ html+=`<button class="btn-blue" id="areaBtn" style="width:100%;">${areaActionLabel(me.area)}</button>`; }
-    // Tấn công
-    const range=attackRange(s,myId); const targets=playersInAreas(s,range,myId);
-    if(!s.didAttack&&targets.length){ html+=`<div class="muted" style="margin:8px 0 4px;">⚔️ Tấn công (cùng tầm):</div><div class="row">${targets.map(id=>`<button class="btn-target" onclick="attack('${id}')">${s.players[id].name}</button>`).join('')}</div>`; }
-    // Charles đánh lại
-    if(s.didAttack&&me.char==='charles'&&me.revealed){ html+=`<button class="btn-ghost" id="charlesBtn" style="width:100%;margin-top:6px;">✨ Tự chịu 2 máu để tấn công lại</button>`; }
-    html+=`<button class="btn-gold" id="endBtn" style="width:100%;margin-top:8px;">Kết Thúc Lượt ➡️</button></div>`;
-    return html;
+  if(s.step==='area'){const A=AREAS[me.area];return `<div class="card">${steps}<div class="small muted" style="margin-bottom:4px;">${A.name}: ${A.desc}</div><button class="btn-blue" onclick="UI.doArea()" style="width:100%;">${areaActionLabel(me.area)}</button><button class="btn-ghost" onclick="UI.skipArea()" style="width:100%;">Bỏ qua hành động khu</button></div>`;}
+  if(s.step==='attack'){
+    const tg=attackTargets(s,myId);let html=steps;
+    if(!s.attacked){
+      const forced=hasEq(me,'masamune')&&tg.length>0;
+      if(tg.length){html+=`<div class="muted small" style="margin-bottom:4px;">⚔️ Mục tiêu trong tầm${hasEq(me,'handgun')?' (Súng Lục: mọi khu khác)':''}:</div>`;if(hasEq(me,'machinegun'))html+=btn('btn-target',"UI.attackTarget('all')",`🔫 Súng Máy: đánh tất cả (${tg.map(pl).join(', ')})`);else html+=`<div class="row">${tg.map(id=>btn('btn-target',`UI.attackTarget('${id}')`,'⚔️ '+pl(id))).join('')}</div>`;}
+      else html+=`<div class="muted small">Không có ai trong tầm đánh.</div>`;
+      html+=`<button class="btn-ghost" onclick="UI.noAttack()" style="width:100%;" ${forced?'disabled':''}>${forced?'Kiếm Masamune: bắt buộc tấn công':'Không tấn công'}</button>`;
+    }else{
+      if(me.char==='charles'&&me.revealed&&s.lastTargets&&s.lastTargets.some(x=>s.players[x].alive))html+=btn('btn-target','UI.charlesAgain()',`🩸 Tự chịu 2 máu, đánh lại ${s.lastTargets.filter(x=>s.players[x].alive).map(pl).join(', ')}`);
+      if(me.char==='wight'&&me.revealed&&!me.usedPower&&s.deathOrder.length)html+=btn('btn-heal','UI.wightUse()',`🧟 Nhân Bản: thêm ${s.deathOrder.length} lượt`);
+      html+=`<button class="btn-gold" onclick="UI.endTurn()">Kết thúc lượt ➡️</button>`;
+    }
+    return `<div class="card">${html}</div>`;
   }
   return '';
 }
-function renderPowerBar(s,me,myTurn){
-  const c=CHARACTERS[me.char];
-  let btn='';
-  if(me.char==='allie'&&!me.usedPower&&myTurn) btn=`<button class="btn-heal" onclick="usePower()" style="width:100%;">✨ Dùng năng lực: hồi đầy máu</button>`;
-  else if((me.char==='franklin'||me.char==='george')&&!me.usedPower&&myTurn&&s.step==='move') btn=`<button class="btn-heal" onclick="usePower()" style="width:100%;">✨ Dùng năng lực (đầu lượt)</button>`;
-  if(!btn) return '';
-  return `<div class="card" style="padding:8px 12px;">${btn}</div>`;
+// ---- popup luật / thẻ ----
+function openModal(title,body){$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modal').hidden=false;}
+function closeModal(){const m=$('modal');if(m)m.hidden=true;}
+function showCard(cid){const C=CARDS[cid];if(!C)return;openModal(`${C.deck==='white'?'⬜':'⬛'} ${C.name}`,`<p class="muted">${C.type==='equip'?'Trang bị: luôn có hiệu lực, ai cũng thấy.':'Thẻ dùng 1 lần.'}</p><p>${esc(C.desc)}</p>`);}
+function openRules(){
+  let h=`<h3>Lượt chơi</h3><p>1. Di chuyển (bắt buộc): tung d6 + d4, tới khu có số đó. Tung 7 thì chọn khu bất kỳ khác khu đang đứng. Trùng khu đang đứng thì tung lại.</p><p>2. Hành động khu (tùy chọn).</p><p>3. Tấn công (tùy chọn, cuối lượt): chọn 1 người ở khu của bạn hoặc khu cặp với nó, tung d6 và d4, sát thương bằng hiệu 2 số; bằng nhau là trượt.</p><p>Hạ gục ai thì được lấy 1 trang bị của người đó (tự chọn), số còn lại bị bỏ. Ván kết thúc ngay khi có người đạt điều kiện thắng; nhiều người có thể cùng thắng, kể cả đã chết.</p><p>Lộ diện lúc nào cũng được (trừ Daniel). Năng lực chỉ dùng được sau khi lộ diện.</p>`;
+  h+=`<h3>Khu vực</h3>`+AREA_IDS.map(a=>`<p><b>${AREAS[a].name}</b> (${AREAS[a].nums.join('/')}): ${AREAS[a].desc}</p>`).join('');
+  h+=`<h3>Nhân vật</h3>`+Object.keys(CHARACTERS).map(k=>{const c=CHARACTERS[k];return `<p><b>${c.name}</b> · ${factionLabel(c.faction)} · ${c.hp} máu<br>Thắng: ${WINCOND[k]}<br>${c.power}</p>`;}).join('');
+  h+=`<p class="muted">Số vai theo số người — 4: 2 Thợ Săn, 2 Bóng Tối · 5: 2/2/1 Trung Lập · 6: 2/2/2 · 7: 2/2/3 · 8: 3/3/2.</p>`;
+  const deckList=(ids,title)=>{const cnt={};ids.forEach(i=>cnt[i]=(cnt[i]||0)+1);return `<h3>${title}</h3>`+Object.keys(cnt).map(i=>`<p><b>${CARDS[i].name}</b>${cnt[i]>1?' ×'+cnt[i]:''}${CARDS[i].type==='equip'?' <span class="muted">(trang bị)</span>':''}: ${CARDS[i].desc}</p>`).join('');};
+  h+=deckList(WHITE_DECK,'Thẻ Trắng (16)')+deckList(BLACK_DECK,'Thẻ Đen (16)');
+  const hc={};HERMIT_DECK.forEach(i=>hc[i]=(hc[i]||0)+1);
+  h+=`<h3>Thẻ Ẩn Sĩ (16)</h3><p class="muted">Người rút đọc kín rồi đưa cho 1 người khác. Người nhận làm theo nếu trúng điều kiện, không thì "không có gì xảy ra". Cả hai không được tiết lộ nội dung thẻ.</p>`+Object.keys(hc).map(i=>`<p><b>${HERMIT[i].name}</b>${hc[i]>1?' ×'+hc[i]:''}: ${hermitText(i)}</p>`).join('');
+  openModal('📖 Luật và thẻ',h);
 }
-function areaActionLabel(area){
-  return {church:'⬜ Rút thẻ Trắng',cemetery:'⬛ Rút thẻ Đen',hermit:'🟢 Rút thẻ Ẩn Sĩ',gate:'🔮 Cổng Địa Ngục (chọn bộ)',woods:'🌲 Rừng Quái Dị (hại/hồi)',altar:'🏛️ Bàn Thờ Cổ (cướp trang bị)'}[area]||'Hành động khu';
-}
-function targetPlayersHtml(s,fn,label,ids){ return `<div class="card"><div class="muted" style="margin-bottom:6px;">${label}</div><div class="row">${ids.map(id=>`<button class="btn-target" onclick="${fn}('${id}')">${s.players[id].name}</button>`).join('')}</div><button class="btn-ghost" onclick="skipArea()" style="width:100%;margin-top:6px;">Bỏ qua</button></div>`; }
-function targetAreasHtml(s,fn,label,ids){ return `<div class="card"><div class="muted" style="margin-bottom:6px;">${label}</div><div class="row">${ids.map(a=>`<button class="btn-ghost" onclick="${fn}('${a}')">${AREAS[a].name}</button>`).join('')}</div></div>`; }
-function wireControls(s,me){
-  const rb=document.getElementById('rollBtn');if(rb)rb.onclick=rollMove;
-  const ab=document.getElementById('areaBtn');if(ab)ab.onclick=doArea;
-  const eb=document.getElementById('endBtn');if(eb)eb.onclick=endTurn;
-  const rv=document.getElementById('revealBtn');if(rv)rv.onclick=reveal;
-  const cb=document.getElementById('charlesBtn');if(cb)cb.onclick=charlesReattack;
-}
+function copyLink(){const url=location.origin+location.pathname+'#'+room;const p=(navigator.clipboard&&navigator.clipboard.writeText)?navigator.clipboard.writeText(url):Promise.reject();p.then(()=>pushToast('🔗 Đã sao chép link phòng: '+esc(url)),()=>prompt('Link phòng:',url));}
+function confirmSkip(){if(confirm('Bỏ lượt hiện tại? Quyết định đang chờ sẽ được xử lý mặc định.'))UI.hostSkip();}
+function confirmKick(id){if(confirm('Loại người này khỏi ván? Họ không tính là chết.'))UI.hostKick(id);}
 
-// ============ INIT ============
+// ================= KHỞI ĐỘNG =================
 (function init(){
-  const inp=document.getElementById('nameInput'),btn=document.getElementById('joinBtn'),rb=document.getElementById('resetBtn');
-  btn.onclick=joinLobby; rb.onclick=resetRoom;
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter')joinLobby();});
-  render(); connectMQTT();
+  if(!IS_BROWSER)return;
+  const ni=$('nameInput'),ri=$('roomInput');if(!ni||!ri)return;
+  ni.value=LS('sbt_name')||'';
+  const hash=(location.hash||'').replace('#','').toUpperCase().replace(/[^A-Z0-9]/g,'');ri.value=hash||LS('sbt_room')||'';
+  $('joinBtn').onclick=joinRoom;$('rulesBtn0').onclick=openRules;$('modalClose').onclick=closeModal;
+  $('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+  [ni,ri].forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter')joinRoom();}));
+  render();connectMQTT();
   setTimeout(()=>{if(!connected)setSyncError(true);},9000);
 })();
 </script>
