@@ -734,12 +734,16 @@ function botAct(s,id){
   return false;
 }
 let botKey=null,wdKey=null,deadKey=null;
+// Bot chờ 2,4–4,2 giây mỗi thao tác cho giống người thật; bật 'nhanh' trong sảnh khi chỉ muốn test
+function botFast(){return LS('sbt_botfast')==='1';}
+function toggleBotSpeed(){LS('sbt_botfast',botFast()?'0':'1');render();}
+function botDelay(){return botFast()?700:2400+Math.random()*1800;}
 function scheduleBots(){
   const s=state;if(!s||s.phase!=='playing')return;
   if(controllerId(s)!==myId)return;
   const id=pendingActor(s);const p=s.players[id];if(!p||!p.isBot||!p.alive)return;
   if(botKey===s.seq)return;botKey=s.seq;
-  setTimeout(()=>{const st=state;if(!st||st.phase!=='playing'||st.seq!==botKey||pendingActor(st)!==id)return;const ss=cur();let ok=false;try{ok=botAct(ss,id);}catch(e){console.error('bot',e);}if(!ok){addLog(ss,`🤖 ${ss.players[id].name} không hành động được, bỏ lượt.`);forceSkip(ss);}commit(ss);},900);
+  setTimeout(()=>{const st=state;if(!st||st.phase!=='playing'||st.seq!==botKey||pendingActor(st)!==id)return;const ss=cur();let ok=false;try{ok=botAct(ss,id);}catch(e){console.error('bot',e);}if(!ok){addLog(ss,`🤖 ${ss.players[id].name} không hành động được, bỏ lượt.`);forceSkip(ss);}commit(ss);},botDelay());
 }
 // Người khác không phản hồi quá lâu → xử lý mặc định (chỉ với quyết định ngoài lượt)
 function watchdog(){
@@ -790,7 +794,7 @@ function renderLobby(s,app){
     <div class="muted" style="margin:0 0 8px;">Sảnh chờ · ${n}/8 người (cần 4–8). Chủ phòng 👑 có thể xóa người không còn online.</div>
     ${list||'<div class="muted center">Chưa có ai…</div>'}
     ${waitList?`<div class="muted" style="margin-top:8px;">Hàng chờ:</div>${waitList}`:''}
-    ${inLobby?`<div class="row" style="margin-top:8px;"><button class="btn-ghost" onclick="addBot()" ${n>=8?'disabled':''} style="flex:1;">➕ Thêm bot</button><button class="btn-ghost" onclick="removeBot()" style="flex:1;">➖ Bớt bot</button></div>
+    ${inLobby?`<div class="row" style="margin-top:8px;"><button class="btn-ghost" onclick="addBot()" ${n>=8?'disabled':''} style="flex:1;">➕ Thêm bot</button><button class="btn-ghost" onclick="removeBot()" style="flex:1;">➖ Bớt bot</button></div><div class="center"><button class="btn-ghost btn-sm" onclick="toggleBotSpeed()">🤖 Tốc độ bot: ${botFast()?'nhanh (để test)':'chậm như người thật'}</button></div>
       <button class="btn-main" onclick="UI.startGame()" ${n<4||n>8?'disabled':''}>${n<4?`Cần thêm ${4-n} người để bắt đầu`:'Bắt đầu ván'}</button>
       <button class="btn-ghost" onclick="leaveRoom()" style="width:100%;">Rời phòng</button>`:`<div class="center muted" style="margin-top:8px;">Bạn đang trong hàng chờ.</div>`}
     <div class="row" style="margin-top:6px;">${host?'':`<button class="btn-ghost btn-sm" onclick="claimHost()">👑 Tôi làm chủ phòng</button>`}<button class="btn-ghost btn-sm" onclick="resetRoom()">Đặt lại phòng</button></div>
